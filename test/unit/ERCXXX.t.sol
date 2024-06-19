@@ -29,129 +29,126 @@ contract ERCXXXUnitTest is Test {
     function testInitialState() public view {
         assertEq(t.name(), "Token");
         assertEq(t.symbol(), "TKN");
-        assertEq(t.SHARE_PRICE_PRECISION(), 1e18);
-        assertEq(t.sharePrice(), 1e18);
         assertEq(t.borrowBlacklist(address(0)), true);
         assertEq(t.borrowBlacklist(alice), false);
         assertEq(t.borrowBlacklist(bobby), true);
+        assertEq(t.borrowBlacklist(carol), false);
+        assertEq(t.borrowBlacklist(danny), true);
     }
 
-    function testBalanceOf() public {
-        assertEq(t.sharePrice(), 1e18);
-        t.setSharePrice(2e18);
-        assertEq(t.sharePrice(), 2e18);
-
+    function testSupplyAndBalancesGetters() public {
+        assertEq(t.totalSupply(), 0);
+        assertEq(t.realTotalSupply(), 0);
+        assertEq(t.totalBorrowableSupply(), 0);
+        assertEq(t.totalBorrowedSupply(), 0);
+        assertEq(t.currentBorrowableSupply(), 0);
         assertEq(t.balanceOf(alice), 0);
         assertEq(t.balanceOf(bobby), 0);
+        assertEq(t.balanceOf(carol), 0);
+        assertEq(t.balanceOf(danny), 0);
 
-        t.mint(alice, 100);
-        assertEq(t.balanceOf(alice), 100);
+        // seed balances
+        t.mint(alice, 30);
+        t.mint(bobby, 70); // !borrowable
+        t.mint(carol, 50);
+        t.mint(danny, 100); // !borrowable
 
-        t.setSharePrice(3e18);
-        assertEq(t.sharePrice(), 3e18);
-        assertEq(t.balanceOf(alice), 150);
+        assertEq(t.totalSupply(), 250);
+        assertEq(t.realTotalSupply(), 250);
+        assertEq(t.totalBorrowableSupply(), 80);
+        assertEq(t.totalBorrowedSupply(), 0);
+        assertEq(t.currentBorrowableSupply(), 80);
+        assertEq(t.balanceOf(alice), 30);
+        assertEq(t.balanceOf(bobby), 70);
+        assertEq(t.balanceOf(carol), 50);
+        assertEq(t.balanceOf(danny), 100);
 
-        t.mint(bobby, 300);
-        assertEq(t.balanceOf(bobby), 300);
+        // danny borrows
+        t.mintForBorrow(danny, 70);
 
-        t.setSharePrice(6e18);
-        assertEq(t.sharePrice(), 6e18);
-        assertEq(t.balanceOf(alice), 300);
-        assertEq(t.balanceOf(bobby), 600);
+        assertEq(t.totalSupply(), 320);
+        assertEq(t.realTotalSupply(), 250);
+        assertEq(t.totalBorrowableSupply(), 80);
+        assertEq(t.totalBorrowedSupply(), 70);
+        assertEq(t.currentBorrowableSupply(), 10);
+        assertEq(t.balanceOf(alice), 30);
+        assertEq(t.balanceOf(bobby), 70);
+        assertEq(t.balanceOf(carol), 50);
+        assertEq(t.balanceOf(danny), 170);
+
+        // danny repays 70 principal + 70 interest
+        t.burnForRepay(danny, 140, 70);
+
+        assertEq(t.totalSupply(), 180);
+        assertEq(t.realTotalSupply(), 180);
+        assertEq(t.totalBorrowableSupply(), 80);
+        assertEq(t.totalBorrowedSupply(), 0);
+        assertEq(t.currentBorrowableSupply(), 80);
+        assertEq(t.balanceOf(alice), 30);
+        assertEq(t.balanceOf(bobby), 70);
+        assertEq(t.balanceOf(carol), 50);
+        assertEq(t.balanceOf(danny), 30);
+
+        // 70 interest distributed should make the share price go up
+        uint256 _sharePriceBefore = t.sharePrice();
+        uint256 _realTotalSupplyBefore = t.realTotalSupply();
+        t.setSharePrice(_sharePriceBefore * (70 + _realTotalSupplyBefore) / _realTotalSupplyBefore);
+
+        // totalSupply after danny repays is 30 + 70 + 50 + 30 = 180
+        // alice's share of profit is 70 * 30 / 180 = 11.67 = 11
+        // bobby's share of profit is 70 * 70 / 180 = 27.22 = 27
+        // carol's share of profit is 70 * 50 / 180 = 19.44 = 19
+        // danny's share of profit is 70 * 30 / 180 = 11.67 = 11
+        // borrowable increases by alice's + carol's profit = 31.11 = 31
+        assertEq(t.totalSupply(), 249);
+        assertEq(t.realTotalSupply(), 249);
+        assertEq(t.totalBorrowableSupply(), 80 + 31);
+        assertEq(t.totalBorrowedSupply(), 0);
+        assertEq(t.currentBorrowableSupply(), 80 + 31);
+        assertEq(t.balanceOf(alice), 30 + 11);
+        assertEq(t.balanceOf(bobby), 70 + 27);
+        assertEq(t.balanceOf(carol), 50 + 19);
+        assertEq(t.balanceOf(danny), 30 + 11);
     }
 
-    function testTotalSupply() public {
-        t.mint(alice, 100);
-        assertEq(t.totalSupply(), 100);
-
-        t.setSharePrice(2e18);
-        assertEq(t.totalSupply(), 200);
-
-        t.mint(bobby, 400);
-        assertEq(t.totalSupply(), 600);
-
-        t.setSharePrice(4e18);
-        assertEq(t.totalSupply(), 1200);
-    }
-
-    function testTotalBorrowableShares() public {
-        assertEq(t.totalBorrowableShares(), 0);
+    function testBorrowBlacklist() public {
+        assertEq(t.totalBorrowableSupply(), 0);
 
         // updated on mint
         t.mint(alice, 30);
         t.mint(bobby, 70);
         t.mint(carol, 50);
         t.mint(danny, 100);
-        assertEq(t.totalBorrowableShares(), 80);
+        assertEq(t.totalBorrowableSupply(), 80);
 
         // updated on transfer [blacklisted -> !blacklisted]
         vm.prank(bobby);
         t.transfer(alice, 5);
-        assertEq(t.totalBorrowableShares(), 85);
+        assertEq(t.totalBorrowableSupply(), 85);
 
         // !updated on transfer [blacklisted -> blacklisted]
         vm.prank(bobby);
         t.transfer(bobby, 5);
-        assertEq(t.totalBorrowableShares(), 85);
+        assertEq(t.totalBorrowableSupply(), 85);
         vm.prank(bobby);
         t.transfer(danny, 5);
-        assertEq(t.totalBorrowableShares(), 85);
+        assertEq(t.totalBorrowableSupply(), 85);
 
         // !updated on transfer [!blacklisted -> !blacklisted]
         vm.prank(alice);
         t.transfer(alice, 5);
-        assertEq(t.totalBorrowableShares(), 85);
+        assertEq(t.totalBorrowableSupply(), 85);
         vm.prank(alice);
         t.transfer(carol, 20);
-        assertEq(t.totalBorrowableShares(), 85);
+        assertEq(t.totalBorrowableSupply(), 85);
 
         // updated on transfer [!blacklisted -> blacklisted]
         vm.prank(alice);
         t.transfer(bobby, 15);
-        assertEq(t.totalBorrowableShares(), 70);
-    }
+        assertEq(t.totalBorrowableSupply(), 70);
 
-    function testMintForBorrow() public {
-        t.setSharePrice(2e18);
+        // update ratio
         t.setMaxBorrowSupplyToRealSupplyRatio(2e18);
-        t.mint(alice, 100);
-        t.mint(bobby, 150);
-
-        assertEq(t.totalSupply(), 250);
-        assertEq(t.realTotalSupply(), 250);
-        assertEq(t.totalBorrowedSupply(), 0);
-        assertEq(t.totalBorrowableSupply(), 200);
-    
-        assertEq(t.balanceOf(alice), 100);
-        assertEq(t.balanceOf(bobby), 150);
-        assertEq(t.balanceOf(carol), 0);
-        assertEq(t.balanceOf(danny), 0);
-        
-        t.mintForBorrow(carol, 176);
-
-        assertEq(t.totalSupply(), 426);
-        assertEq(t.realTotalSupply(), 250);
-        assertEq(t.totalBorrowedSupply(), 176);
-        assertEq(t.totalBorrowableSupply(), 24);
-
-        assertEq(t.balanceOf(alice), 100);
-        assertEq(t.balanceOf(bobby), 150);
-        assertEq(t.balanceOf(carol), 176);
-        assertEq(t.balanceOf(danny), 0);
-
-        vm.expectRevert("ERCXXX: borrow cap reached");
-        t.mintForBorrow(danny, 26);
-
-        t.mintForBorrow(danny, 25);
-
-        assertEq(t.totalSupply(), 450);
-        assertEq(t.realTotalSupply(), 250);
-        assertEq(t.totalBorrowedSupply(), 200);
-        assertEq(t.totalBorrowableSupply(), 0);
-
-        assertEq(t.balanceOf(alice), 100);
-        assertEq(t.balanceOf(bobby), 150);
-        assertEq(t.balanceOf(carol), 176);
-        assertEq(t.balanceOf(danny), 24); // 1 rounded down due to share price
+        assertEq(t.totalBorrowableSupply(), 140);
     }
 }

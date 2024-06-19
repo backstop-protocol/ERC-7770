@@ -5,19 +5,24 @@ import {CoreRef} from "../core/CoreRef.sol";
 import {CoreRoles} from "../core/CoreRoles.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+import {console} from "forge-std/Test.sol";
+
+/// @notice Standard for a borrowable token on LendChain
+/// Must be initialize()'d after deployment. Can be used behind a proxy.
+/// Invariants :
+/// a) totalSupply == realTotalSupply + totalBorrowedSupply
+/// b) totalBorrowableSupply == totalBorrowedSupply + currentBorrowableSupply
+/// c) sum(balanceOf(...users)) <= totalSupply()
 contract ERCXXX is CoreRef, ERC20 {
     /// @notice Starting sharePrice upon deployment
-    uint256 public constant SHARE_PRICE_PRECISION = 1e18;
+    uint256 internal constant SHARE_PRICE_PRECISION = 1e18;
 
     /// @notice Number of underlying per share
     uint256 public sharePrice;
 
-    /// @notice Number of shares borrowed
-    uint256 public totalBorrowedShares;
-
     /// @notice Number of shares borrowable
     /// @dev see borrowBlacklist
-    uint256 public totalBorrowableShares;
+    uint256 internal totalBorrowableShares;
 
     /// @notice Tokens that are held by these addresses are not borrowable
     mapping(address => bool) public borrowBlacklist;
@@ -26,6 +31,9 @@ contract ERCXXX is CoreRef, ERC20 {
     /// e.g. 3e18 = 300%, meaning for each token in existence (in the realTotalSupply()),
     /// 2 new tokens can be minted out of thin air to be borrowed.
     uint256 public maxBorrowSupplyToRealSupplyRatio;
+
+    /// @notice Number of underlying tokens currently borrowed
+    uint256 public totalBorrowedSupply;
 
     // ERC20 name & symbol (private in OZ implementation)
     string internal _name;
@@ -64,6 +72,7 @@ contract ERCXXX is CoreRef, ERC20 {
         return shares * sharePrice / SHARE_PRICE_PRECISION;
     }
     function _underlying2shares(uint256 underlying) internal view returns (uint256) {
+        if (sharePrice == 0) return 0;
         return underlying * SHARE_PRICE_PRECISION / sharePrice;
     }
 
@@ -77,16 +86,16 @@ contract ERCXXX is CoreRef, ERC20 {
         return _shares2underlying(shares);
     }
 
-    function totalBorrowedSupply() public view returns (uint256) {
-        return _shares2underlying(totalBorrowedShares);
+    function totalBorrowableSupply() public view returns (uint256) {
+        return _shares2underlying(totalBorrowableShares) * maxBorrowSupplyToRealSupplyRatio / 1e18;
     }
 
-    function totalBorrowableSupply() public view returns (uint256) {
-        return _shares2underlying((totalBorrowableShares * maxBorrowSupplyToRealSupplyRatio / 1e18) - totalBorrowedShares);
+    function currentBorrowableSupply() public view returns (uint256) {
+        return totalBorrowableSupply() - totalBorrowedSupply;
     }
 
     function realTotalSupply() public view returns (uint256) {
-        return totalSupply() - totalBorrowedSupply();
+        return totalSupply() - totalBorrowedSupply;
     }
 
     function _update(address from, address to, uint256 value) internal override {
@@ -118,32 +127,36 @@ contract ERCXXX is CoreRef, ERC20 {
     }
 
     function mintForBorrow(address to, uint256 amount) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
-        uint256 shares = _underlying2shares(amount);
-        uint256 _totalBorrowedShares = totalBorrowedShares;
-        uint256 _totalBorrowableShares = totalBorrowableShares;
+        uint256 _totalBorrowedSupply = totalBorrowedSupply;
         require(
-            _totalBorrowedShares + shares <= (_totalBorrowableShares * maxBorrowSupplyToRealSupplyRatio / 1e18),
+            _totalBorrowedSupply + amount <= totalBorrowableSupply(),
             "ERCXXX: borrow cap reached"
         );
-        totalBorrowedShares = _totalBorrowedShares + shares;
 
-        _mint(to, amount);
+        totalBorrowedSupply = _totalBorrowedSupply + amount;
+
         // borrowed shares should not increment the number of borrowable shares
+        uint256 _totalBorrowableShares = totalBorrowableShares;
+        _mint(to, amount);
         totalBorrowableShares = _totalBorrowableShares;
     }
 
-    function burnForRepay(uint256 amount) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
-        uint256 shares = _underlying2shares(amount);
-        uint256 _totalBorrowedShares = totalBorrowedShares;
-        uint256 _totalBorrowableShares = totalBorrowableShares;
+    /// @notice Called by lending market to close a loan
+    /// @param from address to burn tokens from
+    /// @param amount of tokens to burn
+    /// @param principal amount of the loan that is repaid
+    /// @dev interest / loss is handled separately through `setSharePrice`
+    function burnForRepay(address from, uint256 amount, uint256 principal) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
+        uint256 _totalBorrowedSupply = totalBorrowedSupply;
         require(
-            shares <= _totalBorrowedShares,
+            principal <= _totalBorrowedSupply,
             "ERCXXX: repay more than total debt"
         );
-        totalBorrowedShares = _totalBorrowedShares - shares;
+        totalBorrowedSupply = _totalBorrowedSupply - principal;
 
-        _burn(_msgSender(), amount);
         // borrow repays should not decrement the number of borrowable shares
+        uint256 _totalBorrowableShares = totalBorrowableShares;
+        _burn(from, amount);
         totalBorrowableShares = _totalBorrowableShares;
     }
 }
