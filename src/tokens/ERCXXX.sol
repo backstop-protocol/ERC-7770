@@ -141,18 +141,13 @@ contract ERCXXX is CoreRef, ERC20 {
         totalBorrowableShares = _totalBorrowableShares;
     }
 
-    /// @notice Called by lending market to close a loan
-    /// @param from address to burn tokens from
-    /// @param amount of tokens to burn
-    /// @param principal amount of the loan that is repaid
-    /// @dev interest / loss is handled separately through `setSharePrice`
-    function burnForRepay(address from, uint256 amount, uint256 principal) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
+    function burnForRepay(address from, uint256 amount) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
         uint256 _totalBorrowedSupply = totalBorrowedSupply;
-        require(
-            principal <= _totalBorrowedSupply,
-            "ERCXXX: repay more than total debt"
-        );
-        totalBorrowedSupply = _totalBorrowedSupply - principal;
+        if (amount > _totalBorrowedSupply) {
+            totalBorrowedSupply = 0;
+        } else {
+            totalBorrowedSupply = _totalBorrowedSupply - amount;
+        }
 
         // borrow repays should not decrement the number of borrowable shares
         uint256 _totalBorrowableShares = totalBorrowableShares;

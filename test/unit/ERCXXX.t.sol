@@ -77,7 +77,7 @@ contract ERCXXXUnitTest is Test {
         assertEq(t.balanceOf(danny), 170);
 
         // danny repays 70 principal + 70 interest
-        t.burnForRepay(danny, 140, 70);
+        t.burnForRepay(danny, 140);
 
         assertEq(t.totalSupply(), 180);
         assertEq(t.realTotalSupply(), 180);
