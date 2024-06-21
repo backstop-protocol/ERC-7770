@@ -31,7 +31,6 @@ contract LendCore is CoreRef {
         uint32 lastUpdate;
         uint64 feePercent;
         address feeRecipient;
-        uint128 unclaimedFees;
         uint128 totalBorrowAssets;
         uint128 totalBorrowShares;
     }
@@ -57,7 +56,6 @@ contract LendCore is CoreRef {
 
         Market memory _mkt = mkt;
         _mkt.lastUpdate = uint32(block.timestamp); // good until 2106-02-07
-        _mkt.unclaimedFees = uint128(0);
         _mkt.totalBorrowAssets = uint128(0);
         _mkt.totalBorrowShares = uint128(0);
         markets[marketId] = _mkt;
@@ -222,11 +220,12 @@ contract LendCore is CoreRef {
             // update ERCXXX share price
             address _debtToken = markets[marketId].debtToken;
             uint256 _sharePrice = ERCXXX(_debtToken).sharePrice();
-            uint256 _realTotalSupply = ERCXXX(_debtToken).realTotalSupply();
-            if (badDebtAssets > _realTotalSupply) {
+            uint256 _totalSupply = ERCXXX(_debtToken).totalSupply();
+            if (badDebtAssets > _totalSupply) {
+                // should never be reachable
                 ERCXXX(_debtToken).setSharePrice(0);
             } else {
-                ERCXXX(_debtToken).setSharePrice(_sharePrice * (_realTotalSupply - badDebtAssets) / _realTotalSupply);
+                ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
             }
         }
 
@@ -248,28 +247,14 @@ contract LendCore is CoreRef {
         markets[marketId].totalBorrowAssets = _totalBorrowAssets + uint128(interest);
         uint256 fee = interest * markets[marketId].feePercent / 1e18;
         assert(fee < type(uint128).max); // for safe cast
-        markets[marketId].unclaimedFees += uint128(fee);
         markets[marketId].lastUpdate = uint32(block.timestamp); // good until 2106-02-07
 
         // update ERCXXX share price
         address _debtToken = markets[marketId].debtToken;
         uint256 _sharePrice = ERCXXX(_debtToken).sharePrice();
-        uint256 _realTotalSupply = ERCXXX(_debtToken).realTotalSupply();
-        ERCXXX(_debtToken).setSharePrice(_sharePrice * (_realTotalSupply + interest - fee) / _realTotalSupply);
-
-        // TODO event
-    }
-
-    function claimFees(bytes32 marketId) external onlyCoreRole(CoreRoles.GOVERNOR) {
-        uint128 _unclaimedFees = markets[marketId].unclaimedFees;
-        address _debtToken = markets[marketId].debtToken;
-        uint256 balance = IERC20(_debtToken).balanceOf(address(this));
-        assert(balance < type(uint128).max); // for safe cast
-        uint128 toClaim = balance < _unclaimedFees ? uint128(balance) : _unclaimedFees;
-
-        markets[marketId].unclaimedFees = _unclaimedFees - toClaim;
-
-        IERC20(_debtToken).safeTransfer(msg.sender, toClaim);
+        uint256 _totalSupply = ERCXXX(_debtToken).totalSupply();
+        ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply + interest - fee) / _totalSupply);
+        ERCXXX(_debtToken).mint(markets[marketId].feeRecipient, fee);
 
         // TODO event
     }

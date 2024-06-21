@@ -16,7 +16,7 @@ contract Core is AccessControlEnumerable {
 
         // Initial roles setup: direct hierarchy, everything under governor
         _setRoleAdmin(CoreRoles.GOVERNOR, CoreRoles.GOVERNOR);
-        _setRoleAdmin(CoreRoles.BRIDGE, CoreRoles.GOVERNOR);
+        _setRoleAdmin(CoreRoles.MINTER, CoreRoles.GOVERNOR);
         _setRoleAdmin(CoreRoles.MANAGE_BORROW_BLACKLIST, CoreRoles.GOVERNOR);
         _setRoleAdmin(CoreRoles.MANAGE_LEVERAGE_PARAMS, CoreRoles.GOVERNOR);
         _setRoleAdmin(CoreRoles.LENDING_MARKET, CoreRoles.GOVERNOR);

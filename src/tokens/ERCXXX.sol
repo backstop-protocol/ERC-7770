@@ -110,7 +110,7 @@ contract ERCXXX is CoreRef, ERC20 {
         ERC20._update(from, to, shares);
     }
 
-    function mint(address account, uint256 value) public onlyCoreRole(CoreRoles.BRIDGE) {
+    function mint(address account, uint256 value) public onlyCoreRole(CoreRoles.MINTER) {
         _mint(account, value);
     }
 

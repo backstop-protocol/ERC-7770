@@ -38,7 +38,8 @@ contract LendCoreUnitTest is Test {
         o = new OracleFixedPrice(3600e18 / 1e12); // 12 decimals of normalization;
         irm = new InterestRateModuleFixedAPR(uint256(0.1e18) / 365 days); // 10% APR
 
-        core.grantRole(CoreRoles.BRIDGE, bridge);
+        core.grantRole(CoreRoles.MINTER, bridge);
+        core.grantRole(CoreRoles.MINTER, address(lend));
         core.grantRole(CoreRoles.MANAGE_BORROW_BLACKLIST, address(this));
         core.grantRole(CoreRoles.MANAGE_LEVERAGE_PARAMS, address(this));
         core.grantRole(CoreRoles.LENDING_MARKET, address(lend));
@@ -58,7 +59,6 @@ contract LendCoreUnitTest is Test {
                 lastUpdate: uint32(0),
                 feePercent: 0.05e18, // 5%
                 feeRecipient: address(this),
-                unclaimedFees: uint128(0),
                 totalBorrowAssets: uint128(0),
                 totalBorrowShares: uint128(0)
             })
@@ -130,7 +130,114 @@ contract LendCoreUnitTest is Test {
         assertApproxEqAbs(
             lend.getDebt(marketId, alice),
             1_980_000 * 1e6,
-            0.001 * 1e6
+            100
+        );
+        assertApproxEqAbs(
+            d.balanceOf(carol),
+            // carol starts with 4M debt tokens
+            // 11.8M is circulating, 180k interest is paid, of which
+            // 5% is taken as fee and 95% distributed to lenders.
+            // 4/11.8 * 0.95 * 180k = 57966.10169491525
+            4_057_966 * 1e6,
+            1e6
+        );
+
+        vm.prank(bobby);
+        lend.borrow(marketId, 900_000 * 1e6); // 50% LTV
+
+        // warp 1 year ahead, accrue interest
+        vm.warp(block.timestamp + 365 days);
+        lend.accrueInterest(marketId);
+        assertApproxEqAbs(
+            lend.getDebt(marketId, alice),
+            2_178_000 * 1e6,
+            100
+        );
+        assertApproxEqAbs(
+            lend.getDebt(marketId, bobby),
+            990_000 * 1e6,
+            100
+        );
+    }
+
+    function testRepays() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 4_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        lend.borrow(marketId, 900_000 * 1e6); // 25% LTV
+
+        assertEq(c.balanceOf(alice), 0);
+        assertEq(c.balanceOf(address(lend)), 1000 ether);
+        assertEq(d.balanceOf(alice), 900_000 * 1e6);
+
+        // warp 1 year ahead, accrue interest
+        vm.warp(block.timestamp + 365 days);
+        lend.accrueInterest(marketId);
+        assertApproxEqAbs(
+            lend.getDebt(marketId, alice),
+            990_000 * 1e6,
+            100
+        );
+        assertApproxEqAbs(
+            d.balanceOf(carol),
+            // carol starts with 4M debt tokens
+            // 4.9M is circulating, 90k interest is paid, of which
+            // 5% is taken as fee and 95% distributed to lenders.
+            // 4/4.9 * 0.95 * 90k = 69795.91836734692
+            4_069_795 * 1e6,
+            1e6
+        );
+
+        vm.startPrank(alice);
+        d.approve(address(lend), 495_000 * 1e6);
+        lend.repay(marketId, 495_000 * 1e6); // 50% of debt
+        vm.stopPrank();
+
+        assertApproxEqAbs(
+            lend.getDebt(marketId, alice),
+            495_000 * 1e6,
+            100
+        );
+        assertApproxEqAbs(
+            d.balanceOf(carol),
+            4_069_795 * 1e6,
+            1e6
+        );
+        assertApproxEqAbs(
+            d.balanceOf(alice),
+            420_704 * 1e6, // 900k borrowed + 15704 interest - 495k repaid
+            1e6
+        );
+        assertApproxEqAbs(
+            d.balanceOf(address(this)),
+            4500 * 1e6, // 5% * 90k fees
+            1e6
+        );
+
+        // warp 1 year ahead, accrue interest
+        vm.warp(block.timestamp + 365 days);
+        lend.accrueInterest(marketId);
+        assertApproxEqAbs(
+            lend.getDebt(marketId, alice),
+            544_500 * 1e6,
+            100
+        );
+        assertApproxEqAbs(
+            d.balanceOf(carol),
+            // carol starts with 4_069_795 debt tokens
+            // 4_495_000 is circulating, 49.5k interest is paid, of which
+            // 5% is taken as fee and 95% distributed to lenders.
+            // 4069795/4495000 * 0.95 * 49500 = 42576.66515572859
+            (4_069_795 + 42_576 + 1) * 1e6,
+            1e6
         );
     }
 }

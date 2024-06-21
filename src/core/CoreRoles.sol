@@ -9,7 +9,7 @@ library CoreRoles {
     bytes32 internal constant GOVERNOR = keccak256("GOVERNOR_ROLE");
 
     /// @notice can call ERCXXX.mint()
-    bytes32 internal constant BRIDGE = keccak256("BRIDGE_ROLE");
+    bytes32 internal constant MINTER = keccak256("MINTER_ROLE");
 
     /// @notice can call ERCXXX.setBorrowBlacklist()
     bytes32 internal constant MANAGE_BORROW_BLACKLIST = keccak256("MANAGE_BORROW_BLACKLIST_ROLE");

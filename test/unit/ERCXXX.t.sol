@@ -16,7 +16,7 @@ contract ERCXXXUnitTest is Test {
 
     function setUp() public {
         core = new Core();
-        core.grantRole(CoreRoles.BRIDGE, address(this));
+        core.grantRole(CoreRoles.MINTER, address(this));
         core.grantRole(CoreRoles.MANAGE_BORROW_BLACKLIST, address(this));
         core.grantRole(CoreRoles.MANAGE_LEVERAGE_PARAMS, address(this));
         core.grantRole(CoreRoles.LENDING_MARKET, address(this));
