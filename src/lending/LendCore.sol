@@ -150,6 +150,7 @@ contract LendCore is CoreRef {
         uint256 shares;
         if (amount == 0) {
             shares = _borrowShares;
+            amount = (shares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
         } else {
             shares = (amount * (_totalBorrowShares + VIRTUAL_SHARES)) / (_totalBorrowAssets + VIRTUAL_ASSETS);
         }

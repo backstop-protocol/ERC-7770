@@ -225,8 +225,9 @@ contract LendCoreUnitTest is Test {
         // warp 1 year ahead, accrue interest
         vm.warp(block.timestamp + 365 days);
         lend.accrueInterest(marketId);
+        uint256 finalDebt = lend.getDebt(marketId, alice);
         assertApproxEqAbs(
-            lend.getDebt(marketId, alice),
+            finalDebt,
             544_500 * 1e6,
             100
         );
@@ -239,5 +240,16 @@ contract LendCoreUnitTest is Test {
             (4_069_795 + 42_576 + 1) * 1e6,
             1e6
         );
+
+        // repay full position
+        uint256 aliceBalance = d.balanceOf(alice);
+        vm.prank(bridge);
+        d.mint(alice, finalDebt - aliceBalance);
+        vm.startPrank(alice);
+        d.approve(address(lend), finalDebt);
+        lend.repay(marketId, 0); // all remaining debt
+        vm.stopPrank();
+        assertEq(lend.getDebt(marketId, alice), 0);
+        assertEq(d.balanceOf(alice), 0);
     }
 }
