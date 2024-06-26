@@ -217,77 +217,74 @@ contract LendCore is CoreRef {
     /// will try to repay more shares than the borrower has, because the full borrower collateral
     /// is worth more shares than they are borrowing, and will revert.
     function liquidate(bytes32 marketId, address borrower, uint256 shares) external {
-        require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
+        Market memory mkt = markets[marketId];
+        Position memory pos = positions[marketId][borrower];
+        require(mkt.lastUpdate != 0, "LendCore: invalid market");
         assert(shares < type(uint128).max); // for safe cast
 
         accrueInterest(marketId);
 
-        uint256 collateralPrice = Oracle(markets[marketId].oracle).price();
+        uint256 collateralPrice = Oracle(mkt.oracle).price();
         require(!_isHealthy(marketId, borrower, collateralPrice), "LendCore: healthy");
 
-        uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
-        uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
-        uint128 _borrowShares = positions[marketId][borrower].borrowShares;
+        // if shares == 0, seize the full user collateral,
+        // else seize a proportion equal to the current oracle value of the debt
         uint128 _userCollateral = uint128(getUserCollateral(marketId, borrower));
         uint256 seizedAssets;
         if (shares == 0) {
             seizedAssets = _userCollateral;
             uint256 seizedAssetsQuoted = (seizedAssets * collateralPrice + (1e18 - 1)) / 1e18;
-            uint256 _liquidationBonus = markets[marketId].liquidationBonus;
+            uint256 _liquidationBonus = mkt.liquidationBonus;
             uint256 _assetsToRepay = (seizedAssetsQuoted * 1e18 + (_liquidationBonus - 1)) / _liquidationBonus;
-            shares = (_assetsToRepay * (_totalBorrowShares + VIRTUAL_SHARES) + (_totalBorrowAssets + VIRTUAL_ASSETS - 1)) / (_totalBorrowAssets + VIRTUAL_ASSETS);
+            shares = (_assetsToRepay * (mkt.totalBorrowShares + VIRTUAL_SHARES) + (mkt.totalBorrowAssets + VIRTUAL_ASSETS - 1)) / (mkt.totalBorrowAssets + VIRTUAL_ASSETS);
         } else {
-            seizedAssets = shares * (_totalBorrowAssets + VIRTUAL_ASSETS) / (_totalBorrowShares + VIRTUAL_SHARES);
-            seizedAssets = seizedAssets * markets[marketId].liquidationBonus / 1e18;
+            seizedAssets = shares * (mkt.totalBorrowAssets + VIRTUAL_ASSETS) / (mkt.totalBorrowShares + VIRTUAL_SHARES);
+            seizedAssets = seizedAssets * mkt.liquidationBonus / 1e18;
             seizedAssets = seizedAssets * 1e18 / collateralPrice;
         }
-        uint256 repaidAssets = (shares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
+        uint256 repaidAssets = (shares * (mkt.totalBorrowAssets + VIRTUAL_ASSETS) + (mkt.totalBorrowShares + VIRTUAL_SHARES - 1)) / (mkt.totalBorrowShares + VIRTUAL_SHARES);
 
-        positions[marketId][borrower].borrowShares = _borrowShares - uint128(shares);
-        markets[marketId].totalBorrowShares -= uint128(shares);
-        _totalBorrowShares -= uint128(shares);
-        if (repaidAssets > _totalBorrowAssets) {
-            markets[marketId].totalBorrowAssets = uint128(0);
-            _totalBorrowAssets = uint128(0);
+        pos.borrowShares -= uint128(shares);
+        mkt.totalBorrowShares -= uint128(shares);
+        if (repaidAssets > mkt.totalBorrowAssets) {
+            mkt.totalBorrowAssets = uint128(0);
         } else {
-            markets[marketId].totalBorrowAssets = uint128(_totalBorrowAssets - repaidAssets);
-            _totalBorrowAssets = uint128(_totalBorrowAssets - repaidAssets);
+            mkt.totalBorrowAssets -= uint128(repaidAssets);
         }
 
         // reduce collateral amount of borrower
-        address _collateralToken = markets[marketId].collateralToken;
         {
-            uint128 _totalCollateralShares = markets[marketId].totalCollateralShares;
-            uint256 _totalCollateralAssets = IERC20(_collateralToken).balanceOf(address(this));
-            uint256 collateralSharesSeized = (seizedAssets * (_totalCollateralShares + VIRTUAL_SHARES) + (_totalCollateralAssets + VIRTUAL_ASSETS - 1)) / (_totalCollateralAssets + VIRTUAL_ASSETS);
+            uint256 _totalCollateralAssets = IERC20(mkt.collateralToken).balanceOf(address(this));
+            uint256 collateralSharesSeized = (seizedAssets * (mkt.totalCollateralShares + VIRTUAL_SHARES) + (_totalCollateralAssets + VIRTUAL_ASSETS - 1)) / (_totalCollateralAssets + VIRTUAL_ASSETS);
             assert(collateralSharesSeized < type(uint128).max); // for safe cast
-            positions[marketId][borrower].collateralShares -= uint128(collateralSharesSeized);
-            markets[marketId].totalCollateralShares = _totalCollateralShares - uint128(collateralSharesSeized);
+            pos.collateralShares -= uint128(collateralSharesSeized);
+            mkt.totalCollateralShares -= uint128(collateralSharesSeized);
         }
 
-        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, repaidAssets);
+        // burn of debt repaid has to happen before sharePrice update if there
+        // is bad debt created during this liquidation
+        ERCXXX(mkt.debtToken).burnForRepay(msg.sender, repaidAssets);
 
         // if bad debt is created, update share price
         if (_userCollateral == seizedAssets) {
-            uint256 badDebtAssets = ((_borrowShares - uint128(shares)) * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
-            if (badDebtAssets > _totalBorrowAssets) {
-                badDebtAssets = _totalBorrowAssets;
+            uint256 badDebtAssets = (pos.borrowShares * (mkt.totalBorrowAssets + VIRTUAL_ASSETS) + (mkt.totalBorrowShares + VIRTUAL_SHARES - 1)) / (mkt.totalBorrowShares + VIRTUAL_SHARES);
+            if (badDebtAssets > mkt.totalBorrowAssets) {
+                badDebtAssets = mkt.totalBorrowAssets;
             }
 
             assert(badDebtAssets < type(uint128).max); // for safe cast
-            markets[marketId].totalBorrowAssets = uint128(_totalBorrowAssets) - uint128(badDebtAssets);
-            markets[marketId].totalBorrowShares = uint128(_totalBorrowShares) - (_borrowShares - uint128(shares));
-            positions[marketId][borrower].borrowShares = 0;
+            mkt.totalBorrowAssets -= uint128(badDebtAssets);
+            mkt.totalBorrowShares -= pos.borrowShares;
+            pos.borrowShares = 0;
 
             // update ERCXXX share price
-            address _debtToken = markets[marketId].debtToken;
-            uint256 _sharePrice = ERCXXX(_debtToken).sharePrice();
-            uint256 _totalSupply = ERCXXX(_debtToken).totalSupply();
+            uint256 _sharePrice = ERCXXX(mkt.debtToken).sharePrice();
+            uint256 _totalSupply = ERCXXX(mkt.debtToken).totalSupply();
             if (badDebtAssets > _totalSupply) {
                 // should never be reachable
-                ERCXXX(_debtToken).setSharePrice(0);
+                ERCXXX(mkt.debtToken).setSharePrice(0);
             } else {
-                ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
+                ERCXXX(mkt.debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
             }
 
             emit Liquidate(block.timestamp, marketId, borrower, badDebtAssets);
@@ -297,7 +294,13 @@ contract LendCore is CoreRef {
         emit WithdrawCollateral(block.timestamp, marketId, borrower, seizedAssets);
         emit Repay(block.timestamp, marketId, borrower, repaidAssets);
 
-        IERC20(_collateralToken).safeTransfer(msg.sender, seizedAssets);
+        // SSTORE
+        markets[marketId].totalBorrowAssets = mkt.totalBorrowAssets; // 1
+        markets[marketId].totalBorrowShares = mkt.totalBorrowShares;
+        markets[marketId].totalCollateralShares = mkt.totalCollateralShares; // 2
+        positions[marketId][borrower] = pos; // 3
+
+        IERC20(mkt.collateralToken).safeTransfer(msg.sender, seizedAssets);
     }
 
     function accrueInterest(bytes32 marketId) public {
