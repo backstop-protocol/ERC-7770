@@ -59,9 +59,9 @@ contract LendCoreUnitTest is Test {
                 oracle: address(o),
                 ltv: uint96(0.8e18), // 80%
                 irm: address(irm),
-                lastUpdate: uint32(0),
-                feePercent: uint64(0.05e18), // 5%
+                lastUpdate: uint96(0),
                 feeRecipient: address(this),
+                feePercent: uint96(0.05e18), // 5%
                 totalBorrowAssets: uint128(0),
                 totalBorrowShares: uint128(0),
                 borrowCap: uint128(10_000_000 * 1e6)

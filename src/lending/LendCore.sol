@@ -35,9 +35,9 @@ contract LendCore is CoreRef {
         address oracle; // 3
         uint96 ltv;
         address irm; // 4
-        uint32 lastUpdate;
-        uint64 feePercent;
+        uint96 lastUpdate;
         address feeRecipient; // 5
+        uint96 feePercent;
         uint128 totalBorrowAssets; // 6
         uint128 totalBorrowShares;
         uint128 borrowCap; // 7
@@ -64,7 +64,7 @@ contract LendCore is CoreRef {
         require(uint256(mkt.liquidationBonus) * uint256(mkt.ltv) / 1e18 <= 1e18, "LendCore: invalid liquidationBonus");
 
         Market memory _mkt = mkt;
-        _mkt.lastUpdate = uint32(block.timestamp); // good until 2106-02-07
+        _mkt.lastUpdate = uint96(block.timestamp);
         _mkt.totalBorrowAssets = uint128(0);
         _mkt.totalBorrowShares = uint128(0);
         markets[marketId] = _mkt;
@@ -90,7 +90,7 @@ contract LendCore is CoreRef {
         accrueInterest(marketId);
 
         markets[marketId].feeRecipient = recipient;
-        markets[marketId].feePercent = uint64(percent); // <= 1e18
+        markets[marketId].feePercent = uint96(percent); // <= 1e18
 
         emit FeeUpdate(block.timestamp, marketId, recipient, percent);
     }
@@ -284,7 +284,7 @@ contract LendCore is CoreRef {
         markets[marketId].totalBorrowAssets = _totalBorrowAssets + uint128(interest);
         uint256 fee = interest * markets[marketId].feePercent / 1e18;
         assert(fee < type(uint128).max); // for safe cast
-        markets[marketId].lastUpdate = uint32(block.timestamp); // good until 2106-02-07
+        markets[marketId].lastUpdate = uint96(block.timestamp);
 
         // update ERCXXX share price
         address _debtToken = markets[marketId].debtToken;
