@@ -180,7 +180,6 @@ contract LendCore is CoreRef {
     }
 
     /// @dev special case if amount == 0, repay the full position
-    // TODO: should we be able to repay loan of others ?
     function repay(bytes32 marketId, uint256 amount) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(amount < type(uint128).max); // for safe cast
