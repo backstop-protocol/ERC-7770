@@ -49,7 +49,7 @@ contract LendCore is CoreRef {
         _setCore(core);
     }
 
-    function createMarket(bytes32 marketId, Market calldata mkt) external onlyCoreRole(CoreRoles.GOVERNOR) {
+    function createMarket(bytes32 marketId, Market calldata mkt) external onlyCoreRole(CoreRoles.ADMIN) {
         require(markets[marketId].lastUpdate == 0, "LendCore: market exists");
         require(mkt.ltv <= 1e18, "LendCore: invalid ltv");
         require(mkt.feePercent <= 1e18, "LendCore: invalid feePercent");
@@ -75,7 +75,7 @@ contract LendCore is CoreRef {
         return positions[marketId][user];
     }
 
-    function setFee(bytes32 marketId, address recipient, uint256 percent) external onlyCoreRole(CoreRoles.GOVERNOR) {
+    function setFee(bytes32 marketId, address recipient, uint256 percent) external onlyCoreRole(CoreRoles.ADMIN) {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         require(percent <= 1e18, "LendCore: invalid fee");
 
@@ -92,6 +92,7 @@ contract LendCore is CoreRef {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(amount < type(uint128).max); // for safe cast
 
+        // TODO: collateral token could be rebasing
         positions[marketId][msg.sender].collateralTokenBalance += uint128(amount);
 
         IERC20(markets[marketId].collateralToken).safeTransferFrom(msg.sender, address(this), amount);
@@ -106,6 +107,7 @@ contract LendCore is CoreRef {
 
         accrueInterest(marketId);
 
+        // TODO: collateral token could be rebasing
         positions[marketId][msg.sender].collateralTokenBalance -= uint128(amount);
 
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
@@ -215,6 +217,7 @@ contract LendCore is CoreRef {
         }
 
         assert(seizedAssets < type(uint128).max); // for safe cast
+        // TODO: collateral token could be rebasing
         positions[marketId][borrower].collateralTokenBalance = _collateralTokenBalance - uint128(seizedAssets);
 
         ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, repaidAssets);
@@ -283,14 +286,13 @@ contract LendCore is CoreRef {
         uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
         uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
         uint256 _ltv = markets[marketId].ltv;
-        uint256 _collateralTokenBalance = positions[marketId][user].collateralTokenBalance;
         uint256 borrowed = (_borrowShares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
-        uint256 maxBorrow = ((_collateralTokenBalance * collateralPrice) / 1e18) * _ltv / 1e18;
+        uint256 maxBorrow = ((getUserCollateral(marketId, user) * collateralPrice) / 1e18) * _ltv / 1e18;
         return maxBorrow >= borrowed;
     }
     
-    // TODO: collateral token could be rebasing
     function getUserCollateral(bytes32 marketId, address user) public view returns (uint256) {
+        // TODO: collateral token could be rebasing
         return positions[marketId][user].collateralTokenBalance;
     }
 
@@ -304,7 +306,6 @@ contract LendCore is CoreRef {
     function getMaxBorrow(bytes32 marketId, address user) public view returns (uint256) {
         uint256 collateralPrice = Oracle(markets[marketId].oracle).price();
         uint256 _ltv = markets[marketId].ltv;
-        uint256 _collateralTokenBalance = positions[marketId][user].collateralTokenBalance;
-        return ((_collateralTokenBalance * collateralPrice) / 1e18) * _ltv / 1e18;
+        return ((getUserCollateral(marketId, user) * collateralPrice) / 1e18) * _ltv / 1e18;
     }
 }

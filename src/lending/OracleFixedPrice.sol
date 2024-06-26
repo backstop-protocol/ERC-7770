@@ -14,7 +14,7 @@ contract OracleFixedPrice is Oracle, CoreRef {
     function price() external override view returns (uint256) {
         return _v;
     }
-    function setPrice(uint256 v) external onlyCoreRole(CoreRoles.GOVERNOR) {
+    function setPrice(uint256 v) external onlyCoreRole(CoreRoles.ADMIN) {
         _v = v;
     }
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {CoreRoles} from "./CoreRoles.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
-/// @title Core access control of the Ethereum Credit Guild
+/// @title Core access control of the LendChain
 /// @author eswak
 /// @notice maintains roles and access control
 contract Core is AccessControlEnumerable {
@@ -12,14 +12,14 @@ contract Core is AccessControlEnumerable {
     constructor() {
         // For initial setup before going live, deployer can then call
         // renounceRole(bytes32 role, address account)
-        _grantRole(CoreRoles.GOVERNOR, msg.sender);
+        _grantRole(CoreRoles.ADMIN, msg.sender);
 
         // Initial roles setup: direct hierarchy, everything under governor
-        _setRoleAdmin(CoreRoles.GOVERNOR, CoreRoles.GOVERNOR);
-        _setRoleAdmin(CoreRoles.MINTER, CoreRoles.GOVERNOR);
-        _setRoleAdmin(CoreRoles.MANAGE_BORROW_BLACKLIST, CoreRoles.GOVERNOR);
-        _setRoleAdmin(CoreRoles.MANAGE_LEVERAGE_PARAMS, CoreRoles.GOVERNOR);
-        _setRoleAdmin(CoreRoles.LENDING_MARKET, CoreRoles.GOVERNOR);
+        _setRoleAdmin(CoreRoles.ADMIN, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MINTER, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MANAGE_BORROW_BLACKLIST, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MANAGE_LEVERAGE_PARAMS, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.LENDING_MARKET, CoreRoles.ADMIN);
     }
 
     /// @notice creates a new role to be maintained
@@ -29,7 +29,7 @@ contract Core is AccessControlEnumerable {
     function createRole(
         bytes32 role,
         bytes32 adminRole
-    ) external onlyRole(CoreRoles.GOVERNOR) {
+    ) external onlyRole(CoreRoles.ADMIN) {
         _setRoleAdmin(role, adminRole);
     }
 
