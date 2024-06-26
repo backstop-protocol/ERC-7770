@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-import {InterestRateModule} from "./InterestRateModule.sol";
+import {IRM} from "./IRM.sol";
 import {CoreRef} from "../core/CoreRef.sol";
 import {CoreRoles} from "../core/CoreRoles.sol";
 
-contract InterestRateModuleFixedAPR is InterestRateModule, CoreRef {
+contract IRMFixedAPR is IRM, CoreRef {
     uint256 private _v;
     constructor(address core, uint256 v) {
         _v = v;

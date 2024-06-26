@@ -7,7 +7,7 @@ import {CoreRoles} from "../../src/core/CoreRoles.sol";
 import {ERCXXX} from "../../src/tokens/ERCXXX.sol";
 import {LendCore} from "../../src/lending/LendCore.sol";
 import {OracleFixedPrice} from "../../src/lending/OracleFixedPrice.sol";
-import {InterestRateModuleFixedAPR} from "../../src/lending/InterestRateModuleFixedAPR.sol";
+import {IRMFixedAPR} from "../../src/lending/IRMFixedAPR.sol";
 
 contract LendCoreUnitTest is Test {
     Core public core;
@@ -15,7 +15,7 @@ contract LendCoreUnitTest is Test {
     ERCXXX public c;
     ERCXXX public d;
     OracleFixedPrice public o;
-    InterestRateModuleFixedAPR public irm;
+    IRMFixedAPR public irm;
 
     bytes32 public marketId = keccak256(bytes("TEST_MARKET"));
 
@@ -36,7 +36,7 @@ contract LendCoreUnitTest is Test {
         d = new ERCXXX();
         d.initialize(address(core), "Debt Token", "USDC");
         o = new OracleFixedPrice(address(core), 3600e18 / 1e12); // 12 decimals of normalization;
-        irm = new InterestRateModuleFixedAPR(address(core), uint256(0.1e18) / 365 days); // 10% APR
+        irm = new IRMFixedAPR(address(core), uint256(0.1e18) / 365 days); // 10% APR
 
         core.grantRole(CoreRoles.MINTER, bridge);
         core.grantRole(CoreRoles.MINTER, address(lend));

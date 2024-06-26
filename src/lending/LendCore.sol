@@ -4,11 +4,11 @@ pragma solidity ^0.8.13;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {ERCXXX} from "../tokens/ERCXXX.sol";
+import {IRM} from "./IRM.sol";
 import {Oracle} from "./Oracle.sol";
+import {ERCXXX} from "../tokens/ERCXXX.sol";
 import {CoreRef} from "../core/CoreRef.sol";
 import {CoreRoles} from "../core/CoreRoles.sol";
-import {InterestRateModule} from "./InterestRateModule.sol";
 
 contract LendCore is CoreRef {
     using SafeERC20 for IERC20;
@@ -18,22 +18,29 @@ contract LendCore is CoreRef {
     uint256 internal constant VIRTUAL_SHARES = 1e6;
     uint256 internal constant VIRTUAL_ASSETS = 1;
 
-    event FeeUpdate(uint256 timestamp, bytes32 marketId, address recipient, uint256 percent);
     event MarketCreate(uint256 timestamp, bytes32 marketId, Market params);
+    event FeeUpdate(uint256 timestamp, bytes32 marketId, address recipient, uint256 percent);
+    event BorrowCapUpdate(uint256 timestamp, bytes32 marketId, uint256 cap);
+    event DepositCollateral(uint256 timestamp, bytes32 marketId, address borrower, uint256 amount);
+    event WithdrawCollateral(uint256 timestamp, bytes32 marketId, address borrower, uint256 amount);
+    event Borrow(uint256 timestamp, bytes32 marketId, address borrower, uint256 amount);
+    event Repay(uint256 timestamp, bytes32 marketId, address borrower, uint256 amount);
+    event Liquidate(uint256 timestamp, bytes32 marketId, address borrower, uint256 badDebt);
+    event AccrueInterest(uint256 timestamp, bytes32 marketId, uint256 interest, uint256 fee);
 
     struct Market {
-        address debtToken;
-        address collateralToken;
+        address debtToken; // 1
+        address collateralToken; // 2
         uint96 liquidationBonus;
-        address oracle;
+        address oracle; // 3
         uint96 ltv;
-        address irm;
+        address irm; // 4
         uint32 lastUpdate;
         uint64 feePercent;
-        address feeRecipient;
-        uint128 totalBorrowAssets;
+        address feeRecipient; // 5
+        uint128 totalBorrowAssets; // 6
         uint128 totalBorrowShares;
-        uint128 borrowCap;
+        uint128 borrowCap; // 7
     }
     struct Position {
         uint128 borrowShares;
@@ -63,7 +70,7 @@ contract LendCore is CoreRef {
         markets[marketId] = _mkt;
 
         // ping IRM
-        InterestRateModule(mkt.irm).ratePerSecond(marketId);
+        IRM(mkt.irm).ratePerSecond(marketId);
 
         emit MarketCreate(block.timestamp, marketId, mkt);
     }
@@ -94,10 +101,11 @@ contract LendCore is CoreRef {
 
         markets[marketId].borrowCap = uint128(cap);
 
-        // TODO event
+        emit BorrowCapUpdate(block.timestamp, marketId, cap);
     }
 
     // deposit collateral
+    // TODO: should we be able to deposit on behalf of others ?
     function deposit(bytes32 marketId, uint256 amount) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(amount < type(uint128).max); // for safe cast
@@ -105,9 +113,9 @@ contract LendCore is CoreRef {
         // TODO: collateral token could be rebasing
         positions[marketId][msg.sender].collateralTokenBalance += uint128(amount);
 
-        IERC20(markets[marketId].collateralToken).safeTransferFrom(msg.sender, address(this), amount);
+        emit DepositCollateral(block.timestamp, marketId, msg.sender, amount);
 
-        // TODO event
+        IERC20(markets[marketId].collateralToken).safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// withdraw collateral
@@ -122,10 +130,9 @@ contract LendCore is CoreRef {
 
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
 
+        emit WithdrawCollateral(block.timestamp, marketId, msg.sender, amount);
 
         IERC20(markets[marketId].collateralToken).safeTransfer(msg.sender, amount);
-
-        // TODO event
     }
 
     function borrow(bytes32 marketId, uint256 amount) external {
@@ -147,12 +154,13 @@ contract LendCore is CoreRef {
 
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
 
-        ERCXXX(markets[marketId].debtToken).mintForBorrow(msg.sender, amount);
+        emit Borrow(block.timestamp, marketId, msg.sender, amount);
 
-        // TODO: emit event
+        ERCXXX(markets[marketId].debtToken).mintForBorrow(msg.sender, amount);
     }
 
     /// @dev special case if amount == 0, repay the full position
+    // TODO: should we be able to repay loan of others ?
     function repay(bytes32 marketId, uint256 amount) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(amount < type(uint128).max); // for safe cast
@@ -179,9 +187,9 @@ contract LendCore is CoreRef {
             markets[marketId].totalBorrowAssets = uint128(_totalBorrowAssets - amount);
         }
 
-        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, amount);
+        emit Repay(block.timestamp, marketId, msg.sender, amount);
 
-        // TODO event
+        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, amount);
     }
 
     /// @dev special case if shares == 0, get the full collateral and repay only part of
@@ -234,16 +242,14 @@ contract LendCore is CoreRef {
 
         // if bad debt is created, update share price
         if (_collateralTokenBalance == seizedAssets) {
-            uint256 badDebtShares = _borrowShares - uint128(shares); // remaining shares
-            uint256 badDebtAssets = (badDebtShares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
+            uint256 badDebtAssets = ((_borrowShares - uint128(shares)) * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
             if (badDebtAssets > _totalBorrowAssets) {
                 badDebtAssets = _totalBorrowAssets;
             }
 
             assert(badDebtAssets < type(uint128).max); // for safe cast
-            assert(badDebtShares < type(uint128).max); // for safe cast
-            markets[marketId].totalBorrowAssets -= uint128(badDebtAssets);
-            markets[marketId].totalBorrowShares -= uint128(badDebtShares);
+            markets[marketId].totalBorrowAssets = uint128(_totalBorrowAssets) - uint128(badDebtAssets);
+            markets[marketId].totalBorrowShares = uint128(_totalBorrowShares) - (_borrowShares - uint128(shares));
             positions[marketId][borrower].borrowShares = 0;
 
             // update ERCXXX share price
@@ -256,18 +262,22 @@ contract LendCore is CoreRef {
             } else {
                 ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
             }
+
+            emit Liquidate(block.timestamp, marketId, borrower, badDebtAssets);
+        } else {
+            emit Liquidate(block.timestamp, marketId, borrower, 0);
         }
+        emit WithdrawCollateral(block.timestamp, marketId, borrower, seizedAssets);
+        emit Repay(block.timestamp, marketId, borrower, repaidAssets);
 
         IERC20(markets[marketId].collateralToken).safeTransfer(msg.sender, seizedAssets);
-
-        // TODO event
     }
 
     function accrueInterest(bytes32 marketId) public {
         uint256 elapsed = block.timestamp - markets[marketId].lastUpdate;
         if (elapsed == 0) return;
 
-        uint256 rps = InterestRateModule(markets[marketId].irm).ratePerSecond(marketId);
+        uint256 rps = IRM(markets[marketId].irm).ratePerSecond(marketId);
         uint128 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
         uint256 interest = _totalBorrowAssets * rps * elapsed / 1e18;
         assert(interest < type(uint128).max); // for safe cast
@@ -283,7 +293,7 @@ contract LendCore is CoreRef {
         ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply + interest - fee) / _totalSupply);
         ERCXXX(_debtToken).mint(markets[marketId].feeRecipient, fee);
 
-        // TODO event
+        emit AccrueInterest(block.timestamp, marketId, interest, fee);
     }
 
     function isHealthy(bytes32 marketId, address user) public view returns (bool) {
