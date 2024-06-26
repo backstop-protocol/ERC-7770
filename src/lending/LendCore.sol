@@ -33,6 +33,7 @@ contract LendCore is CoreRef {
         address feeRecipient;
         uint128 totalBorrowAssets;
         uint128 totalBorrowShares;
+        uint128 borrowCap;
     }
     struct Position {
         uint128 borrowShares;
@@ -49,7 +50,7 @@ contract LendCore is CoreRef {
         _setCore(core);
     }
 
-    function createMarket(bytes32 marketId, Market calldata mkt) external onlyCoreRole(CoreRoles.ADMIN) {
+    function createMarket(bytes32 marketId, Market calldata mkt) external onlyCoreRole(CoreRoles.MANAGE_MARKETS) {
         require(markets[marketId].lastUpdate == 0, "LendCore: market exists");
         require(mkt.ltv <= 1e18, "LendCore: invalid ltv");
         require(mkt.feePercent <= 1e18, "LendCore: invalid feePercent");
@@ -75,7 +76,7 @@ contract LendCore is CoreRef {
         return positions[marketId][user];
     }
 
-    function setFee(bytes32 marketId, address recipient, uint256 percent) external onlyCoreRole(CoreRoles.ADMIN) {
+    function setFee(bytes32 marketId, address recipient, uint256 percent) external onlyCoreRole(CoreRoles.MANAGE_FEES) {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         require(percent <= 1e18, "LendCore: invalid fee");
 
@@ -85,6 +86,15 @@ contract LendCore is CoreRef {
         markets[marketId].feePercent = uint64(percent); // <= 1e18
 
         emit FeeUpdate(block.timestamp, marketId, recipient, percent);
+    }
+
+    function setBorrowCap(bytes32 marketId, uint256 cap) external onlyCoreRole(CoreRoles.MANAGE_BORROW_CAPS) {
+        require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
+        assert(cap < type(uint128).max); // for safe cast
+
+        markets[marketId].borrowCap = uint128(cap);
+
+        // TODO event
     }
 
     // deposit collateral
@@ -124,16 +134,16 @@ contract LendCore is CoreRef {
 
         accrueInterest(marketId);
 
-        uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
-        uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
+        uint128 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
+        uint128 _totalBorrowShares = markets[marketId].totalBorrowShares;
         uint256 shares = (amount * (_totalBorrowShares + VIRTUAL_SHARES) + ((_totalBorrowAssets + VIRTUAL_ASSETS) - 1)) / (_totalBorrowAssets + VIRTUAL_ASSETS);
         assert(shares < type(uint128).max); // for safe cast
 
         positions[marketId][msg.sender].borrowShares += uint128(shares);
-        markets[marketId].totalBorrowShares += uint128(shares);
-        markets[marketId].totalBorrowAssets += uint128(amount);
+        markets[marketId].totalBorrowShares = _totalBorrowShares + uint128(shares);
+        markets[marketId].totalBorrowAssets = _totalBorrowAssets + uint128(amount);
 
-        // TODO: borrow cap on totalBorrowAssets
+        require(_totalBorrowAssets + amount <= markets[marketId].borrowCap, "LendCore: borrow cap reached");
 
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
 

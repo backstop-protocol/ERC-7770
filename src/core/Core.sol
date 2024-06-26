@@ -20,6 +20,9 @@ contract Core is AccessControlEnumerable {
         _setRoleAdmin(CoreRoles.MANAGE_BORROW_BLACKLIST, CoreRoles.ADMIN);
         _setRoleAdmin(CoreRoles.MANAGE_LEVERAGE_PARAMS, CoreRoles.ADMIN);
         _setRoleAdmin(CoreRoles.LENDING_MARKET, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MANAGE_MARKETS, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MANAGE_FEES, CoreRoles.ADMIN);
+        _setRoleAdmin(CoreRoles.MANAGE_BORROW_CAPS, CoreRoles.ADMIN);
     }
 
     /// @notice creates a new role to be maintained

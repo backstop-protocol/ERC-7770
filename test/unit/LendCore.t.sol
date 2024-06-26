@@ -42,6 +42,9 @@ contract LendCoreUnitTest is Test {
         core.grantRole(CoreRoles.MINTER, address(lend));
         core.grantRole(CoreRoles.MANAGE_BORROW_BLACKLIST, address(this));
         core.grantRole(CoreRoles.MANAGE_LEVERAGE_PARAMS, address(this));
+        core.grantRole(CoreRoles.MANAGE_MARKETS, address(this));
+        core.grantRole(CoreRoles.MANAGE_FEES, address(this));
+        core.grantRole(CoreRoles.MANAGE_BORROW_CAPS, address(this));
         core.grantRole(CoreRoles.LENDING_MARKET, address(lend));
 
         d.setBorrowBlacklist(bobby, true);
@@ -60,7 +63,8 @@ contract LendCoreUnitTest is Test {
                 feePercent: uint64(0.05e18), // 5%
                 feeRecipient: address(this),
                 totalBorrowAssets: uint128(0),
-                totalBorrowShares: uint128(0)
+                totalBorrowShares: uint128(0),
+                borrowCap: uint128(10_000_000 * 1e6)
             })
         );
 

@@ -19,4 +19,13 @@ library CoreRoles {
 
     /// @notice can call ERCXXX.setSharePrice(), ERCXXX.mintForBorrow(), and ERCXXX.burnForRepay()
     bytes32 internal constant LENDING_MARKET = keccak256("LENDING_MARKET_ROLE");
+
+    /// @notice can call LendCore.createMarket()
+    bytes32 internal constant MANAGE_MARKETS = keccak256("MANAGE_MARKETS_ROLE");
+
+    /// @notice can call LendCore.setFee()
+    bytes32 internal constant MANAGE_FEES = keccak256("MANAGE_FEES_ROLE");
+
+    /// @notice can call LendCore.setBorrowCap()
+    bytes32 internal constant MANAGE_BORROW_CAPS = keccak256("MANAGE_BORROW_CAPS_ROLE");
 }
