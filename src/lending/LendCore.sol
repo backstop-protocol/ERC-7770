@@ -53,6 +53,7 @@ contract LendCore is CoreRef {
         require(markets[marketId].lastUpdate == 0, "LendCore: market exists");
         require(mkt.ltv <= 1e18, "LendCore: invalid ltv");
         require(mkt.feePercent <= 1e18, "LendCore: invalid feePercent");
+        require(uint256(mkt.liquidationBonus) * uint256(mkt.ltv) / 1e18 <= 1e18, "LendCore: invalid liquidationBonus");
 
         Market memory _mkt = mkt;
         _mkt.lastUpdate = uint32(block.timestamp); // good until 2106-02-07
@@ -130,6 +131,8 @@ contract LendCore is CoreRef {
         markets[marketId].totalBorrowShares += uint128(shares);
         markets[marketId].totalBorrowAssets += uint128(amount);
 
+        // TODO: borrow cap on totalBorrowAssets
+
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
 
         ERCXXX(markets[marketId].debtToken).mintForBorrow(msg.sender, amount);
@@ -169,7 +172,10 @@ contract LendCore is CoreRef {
         // TODO event
     }
 
-    /// @dev special case if shares == 0, repay the full position
+    /// @dev special case if shares == 0, get the full collateral and repay only part of
+    /// the debt (this is used to clear bad debt). Repaying 0 shares while the loan is healthy
+    /// will try to repay more shares than the borrower has, because the full borrower collateral
+    /// is worth more shares than they are borrowing, and will revert.
     function liquidate(bytes32 marketId, address borrower, uint256 shares) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(shares < type(uint128).max); // for safe cast
@@ -182,12 +188,19 @@ contract LendCore is CoreRef {
         uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
         uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
         uint128 _borrowShares = positions[marketId][borrower].borrowShares;
+        uint128 _collateralTokenBalance = uint128(getUserCollateral(marketId, borrower));
+        uint256 seizedAssets;
         if (shares == 0) {
-            shares = _borrowShares;
+            seizedAssets = _collateralTokenBalance;
+            uint256 seizedAssetsQuoted = (seizedAssets * collateralPrice + (1e18 - 1)) / 1e18;
+            uint256 _liquidationBonus = markets[marketId].liquidationBonus;
+            uint256 _assetsToRepay = (seizedAssetsQuoted * 1e18 + (_liquidationBonus - 1)) / _liquidationBonus;
+            shares = (_assetsToRepay * (_totalBorrowShares + VIRTUAL_SHARES) + (_totalBorrowAssets + VIRTUAL_ASSETS - 1)) / (_totalBorrowAssets + VIRTUAL_ASSETS);
+        } else {
+            seizedAssets = shares * (_totalBorrowAssets + VIRTUAL_ASSETS) / (_totalBorrowShares + VIRTUAL_SHARES);
+            seizedAssets = seizedAssets * markets[marketId].liquidationBonus / 1e18;
+            seizedAssets = seizedAssets * 1e18 / collateralPrice;
         }
-        uint256 seizedAssets = shares * (_totalBorrowAssets + VIRTUAL_ASSETS) / (_totalBorrowShares + VIRTUAL_SHARES);
-        seizedAssets = seizedAssets * markets[marketId].liquidationBonus / 1e18;
-        seizedAssets = seizedAssets * 1e18 / collateralPrice;
         uint256 repaidAssets = (shares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
 
         positions[marketId][borrower].borrowShares = _borrowShares - uint128(shares);
@@ -202,9 +215,11 @@ contract LendCore is CoreRef {
         }
 
         assert(seizedAssets < type(uint128).max); // for safe cast
-        uint128 _collateralTokenBalance = positions[marketId][borrower].collateralTokenBalance;
         positions[marketId][borrower].collateralTokenBalance = _collateralTokenBalance - uint128(seizedAssets);
 
+        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, repaidAssets);
+
+        // if bad debt is created, update share price
         if (_collateralTokenBalance == seizedAssets) {
             uint256 badDebtShares = _borrowShares - uint128(shares); // remaining shares
             uint256 badDebtAssets = (badDebtShares * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
@@ -231,8 +246,6 @@ contract LendCore is CoreRef {
         }
 
         IERC20(markets[marketId].collateralToken).safeTransfer(msg.sender, seizedAssets);
-
-        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, repaidAssets);
 
         // TODO event
     }
@@ -266,7 +279,7 @@ contract LendCore is CoreRef {
     }
 
     function _isHealthy(bytes32 marketId, address user, uint256 collateralPrice) internal view returns (bool) {
-        uint128 _borrowShares = positions[marketId][msg.sender].borrowShares;
+        uint128 _borrowShares = positions[marketId][user].borrowShares;
         uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
         uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
         uint256 _ltv = markets[marketId].ltv;
@@ -277,7 +290,7 @@ contract LendCore is CoreRef {
     }
     
     // TODO: collateral token could be rebasing
-    function getCollateral(bytes32 marketId, address user) public view returns (uint256) {
+    function getUserCollateral(bytes32 marketId, address user) public view returns (uint256) {
         return positions[marketId][user].collateralTokenBalance;
     }
 

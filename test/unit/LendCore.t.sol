@@ -35,8 +35,8 @@ contract LendCoreUnitTest is Test {
         c.initialize(address(core), "Collateral Token", "WETH");
         d = new ERCXXX();
         d.initialize(address(core), "Debt Token", "USDC");
-        o = new OracleFixedPrice(3600e18 / 1e12); // 12 decimals of normalization;
-        irm = new InterestRateModuleFixedAPR(uint256(0.1e18) / 365 days); // 10% APR
+        o = new OracleFixedPrice(address(core), 3600e18 / 1e12); // 12 decimals of normalization;
+        irm = new InterestRateModuleFixedAPR(address(core), uint256(0.1e18) / 365 days); // 10% APR
 
         core.grantRole(CoreRoles.MINTER, bridge);
         core.grantRole(CoreRoles.MINTER, address(lend));
@@ -52,17 +52,28 @@ contract LendCoreUnitTest is Test {
             LendCore.Market({
                 debtToken: address(d),
                 collateralToken: address(c),
-                liquidationBonus: 1.1e18, // 110%
+                liquidationBonus: uint96(1.1e18), // 110%
                 oracle: address(o),
-                ltv: 0.8e18, // 80%
+                ltv: uint96(0.8e18), // 80%
                 irm: address(irm),
                 lastUpdate: uint32(0),
-                feePercent: 0.05e18, // 5%
+                feePercent: uint64(0.05e18), // 5%
                 feeRecipient: address(this),
                 totalBorrowAssets: uint128(0),
                 totalBorrowShares: uint128(0)
             })
         );
+
+        vm.label(address(core), "core");
+        vm.label(address(lend), "lend");
+        vm.label(address(c), "collateral");
+        vm.label(address(d), "debt");
+        vm.label(address(o), "oracle");
+        vm.label(address(irm), "irm");
+        vm.label(alice, "alice");
+        vm.label(bobby, "bobby");
+        vm.label(carol, "carol");
+        vm.label(danny, "danny");
     }
 
     function testInitialState() public view {
@@ -119,8 +130,8 @@ contract LendCoreUnitTest is Test {
         assertEq(c.balanceOf(address(lend)), 1_500 ether);
         assertEq(d.balanceOf(alice), 1_800_000 * 1e6);
 
-        assertEq(lend.getCollateral(marketId, alice), 1000 ether);
-        assertEq(lend.getCollateral(marketId, bobby), 500 ether);
+        assertEq(lend.getUserCollateral(marketId, alice), 1000 ether);
+        assertEq(lend.getUserCollateral(marketId, bobby), 500 ether);
         assertEq(lend.getDebt(marketId, alice), 1_800_000 * 1e6);
         assertEq(lend.getDebt(marketId, bobby), 0);
 
@@ -251,5 +262,217 @@ contract LendCoreUnitTest is Test {
         vm.stopPrank();
         assertEq(lend.getDebt(marketId, alice), 0);
         assertEq(d.balanceOf(alice), 0);
+    }
+
+    function testLiquidatePartial() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 4_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        assertEq(lend.getDebt(marketId, alice), 0);
+        uint256 maxBorrow = lend.getMaxBorrow(marketId, alice);
+        // 3600 price * 1000 collateral * 80% ltv
+        assertEq(maxBorrow, 2_880_000 * 1e6);
+        vm.prank(alice);
+        lend.borrow(marketId, maxBorrow); // 100% LTV
+
+        // position is exactly at the limit of healthy
+        assertEq(lend.isHealthy(marketId, alice), true);
+        vm.warp(block.timestamp + 1);
+        lend.accrueInterest(marketId);
+        lend.getDebt(marketId, alice);
+        lend.getMaxBorrow(marketId, alice);
+        assertEq(lend.isHealthy(marketId, alice), false);
+
+        // liquidate half of the position
+        uint256 aliceShares = lend.getPosition(marketId, alice).borrowShares;
+        uint256 aliceDebt = lend.getDebt(marketId, alice);
+        uint256 carolBalance = d.balanceOf(carol);
+        vm.prank(carol);
+        lend.liquidate(marketId, alice, aliceShares / 2);
+
+        assertEq(d.balanceOf(carol), carolBalance - aliceDebt / 2);
+        assertApproxEqAbs(
+            c.balanceOf(carol),
+            (1000 ether / 2) * (0.8e18 * 1.1e18 / 1e36) * aliceDebt / maxBorrow,
+            1e12
+        );
+
+        // position is back to healthy
+        assertEq(lend.isHealthy(marketId, alice), true);
+        // carol received part of alice's collateral
+        assertEq(lend.getUserCollateral(marketId, alice), 1000 ether - c.balanceOf(carol));
+    }
+
+    function testLiquidateFull() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 4_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        assertEq(lend.getDebt(marketId, alice), 0);
+        uint256 maxBorrow = lend.getMaxBorrow(marketId, alice);
+        // 3600 price * 1000 collateral * 80% ltv
+        assertEq(maxBorrow, 2_880_000 * 1e6);
+        vm.prank(alice);
+        lend.borrow(marketId, maxBorrow); // 100% LTV
+
+        // position is exactly at the limit of healthy
+        assertEq(lend.isHealthy(marketId, alice), true);
+        vm.warp(block.timestamp + 1);
+        lend.accrueInterest(marketId);
+        lend.getDebt(marketId, alice);
+        lend.getMaxBorrow(marketId, alice);
+        assertEq(lend.isHealthy(marketId, alice), false);
+
+        // liquidate the full position
+        uint256 aliceShares = lend.getPosition(marketId, alice).borrowShares;
+        uint256 aliceDebt = lend.getDebt(marketId, alice);
+        uint256 carolBalance = d.balanceOf(carol);
+        vm.prank(carol);
+        lend.liquidate(marketId, alice, aliceShares);
+
+        assertEq(d.balanceOf(carol), carolBalance - aliceDebt);
+        assertApproxEqAbs(
+            c.balanceOf(carol),
+            1000 ether * (0.8e18 * 1.1e18 / 1e36) * aliceDebt / maxBorrow,
+            1e12
+        );
+
+        // position is closed
+        assertEq(lend.isHealthy(marketId, alice), true);
+        assertEq(lend.getDebt(marketId, alice), 0);
+        assertEq(lend.getUserCollateral(marketId, alice), 1000 ether - c.balanceOf(carol));
+    }
+
+    function testLiquidateFull0Shares() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 4_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        assertEq(lend.getDebt(marketId, alice), 0);
+        uint256 maxBorrow = lend.getMaxBorrow(marketId, alice);
+        // 3600 price * 1000 collateral * 80% ltv
+        assertEq(maxBorrow, 2_880_000 * 1e6);
+        vm.prank(alice);
+        lend.borrow(marketId, maxBorrow); // 100% LTV
+
+        // position is exactly at the limit of healthy
+        assertEq(lend.isHealthy(marketId, alice), true);
+        vm.warp(block.timestamp + 1);
+        lend.accrueInterest(marketId);
+        lend.getDebt(marketId, alice);
+        lend.getMaxBorrow(marketId, alice);
+        assertEq(lend.isHealthy(marketId, alice), false);
+
+        // liquidate the full position
+        // should revert with over/underflow
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        vm.prank(carol);
+        lend.liquidate(marketId, alice, 0);
+    }
+
+    function testLiquidateBadDebtFull() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 1_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        assertEq(lend.getDebt(marketId, alice), 0);
+        vm.prank(alice);
+        lend.borrow(marketId, 1_000_000 * 1e6);
+
+        // set collateral price to 0
+        o.setPrice(0); // 3600e18 / 1e12 -> 0
+
+        // liquidate the full position
+        vm.prank(carol);
+        lend.liquidate(marketId, alice, 0);
+
+        // position is fully closed
+        assertEq(lend.isHealthy(marketId, alice), true);
+        assertEq(lend.getDebt(marketId, alice), 0);
+        assertEq(lend.getUserCollateral(marketId, alice), 0);
+        assertEq(lend.getPosition(marketId, alice).borrowShares, 0);
+        assertEq(lend.getPosition(marketId, alice).collateralTokenBalance, 0);
+
+        // carol received full collateral, paid full debt (0),
+        // but share price got divided by 2 so her 1M initial tokens
+        // are now only 500k
+        assertEq(d.balanceOf(carol), 500_000 * 1e6);
+        assertEq(c.balanceOf(carol), 1000 ether);
+
+        // alice kept the debt and got none of the collateral back
+        assertEq(d.balanceOf(alice), 500_000 * 1e6);
+        assertEq(c.balanceOf(alice), 0);
+    }
+
+    function testLiquidateBadDebtPartial() public {
+        vm.startPrank(bridge);
+        c.mint(alice, 1000 ether);
+        d.mint(carol, 1_000_000 * 1e6);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        c.approve(address(lend), 1000 ether);
+        lend.deposit(marketId, 1000 ether);
+        vm.stopPrank();
+
+        assertEq(lend.getDebt(marketId, alice), 0);
+        vm.prank(alice);
+        lend.borrow(marketId, 1_000_000 * 1e6);
+
+        // collateral price drops by 80%
+        o.setPrice(720 * 1e18 / 1e12); // 3600 -> 720
+
+        // liquidate the full position
+        vm.prank(carol);
+        lend.liquidate(marketId, alice, 0);
+
+        // position is fully closed
+        assertEq(lend.isHealthy(marketId, alice), true);
+        assertEq(lend.getDebt(marketId, alice), 0);
+        assertEq(lend.getUserCollateral(marketId, alice), 0);
+        assertEq(lend.getPosition(marketId, alice).borrowShares, 0);
+        assertEq(lend.getPosition(marketId, alice).collateralTokenBalance, 0);
+
+        // carol received full collateral, paid full debt
+        // alice's collateral is worth 1000 * 720 = 720_000 USDC
+        // with 10% liquidatorIncentive, carol should repay
+        // 720k / 110% = 654_545.45
+        // so she has left in her wallet ~= 345_454.54
+        // but share price is reduced due to bad debt :
+        // total lenders were 1_345_454.54
+        // loss is 1M (debt) - 654_545.45 (repaid) = 345_454.54
+        // so sharePrice becomes 1 - 345_454.54 / 1_345_454.54 = 0.7432
+        // so carol's balance is 345_454.54 * 0.7432 ~= 256_756.75
+        assertEq(d.balanceOf(carol), 256_756_756_756);
+        assertEq(c.balanceOf(carol), 1000 ether);
+
+        // alice kept the debt and got none of the collateral back
+        assertEq(d.balanceOf(alice), 743_243_243_243);
+        assertEq(c.balanceOf(alice), 0);
     }
 }
