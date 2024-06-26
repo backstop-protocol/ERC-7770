@@ -40,11 +40,12 @@ contract LendCore is CoreRef {
         uint96 feePercent;
         uint128 totalBorrowAssets; // 6
         uint128 totalBorrowShares;
-        uint128 borrowCap; // 7
+        uint128 totalCollateralShares; // 7
+        uint128 borrowCap;
     }
     struct Position {
         uint128 borrowShares;
-        uint128 collateralTokenBalance;
+        uint128 collateralShares;
     }
 
     /// @notice marketId => Market
@@ -66,7 +67,8 @@ contract LendCore is CoreRef {
         Market memory _mkt = mkt;
         _mkt.lastUpdate = uint96(block.timestamp);
         _mkt.totalBorrowAssets = uint128(0);
-        _mkt.totalBorrowShares = uint128(0);
+        _mkt.totalBorrowAssets = uint128(0);
+        _mkt.totalCollateralShares = uint128(0);
         markets[marketId] = _mkt;
 
         // ping IRM
@@ -105,28 +107,46 @@ contract LendCore is CoreRef {
     }
 
     // deposit collateral
-    // TODO: should we be able to deposit on behalf of others ?
     function deposit(bytes32 marketId, uint256 amount) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
         assert(amount < type(uint128).max); // for safe cast
 
-        // TODO: collateral token could be rebasing
-        positions[marketId][msg.sender].collateralTokenBalance += uint128(amount);
+        address _collateralToken = markets[marketId].collateralToken;
+        uint128 _totalCollateralShares = markets[marketId].totalCollateralShares;
+        uint256 _totalCollateralAssets = IERC20(_collateralToken).balanceOf(address(this));
+        uint256 shares = (amount * (_totalCollateralShares + VIRTUAL_SHARES)) / (_totalCollateralAssets + VIRTUAL_ASSETS);
+        assert(shares < type(uint128).max);
+
+        positions[marketId][msg.sender].collateralShares += uint128(shares);
+        markets[marketId].totalCollateralShares = _totalCollateralShares + uint128(shares);
 
         emit DepositCollateral(block.timestamp, marketId, msg.sender, amount);
 
-        IERC20(markets[marketId].collateralToken).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(_collateralToken).safeTransferFrom(msg.sender, address(this), amount);
     }
 
-    /// withdraw collateral
+    // withdraw collateral
+    /// @dev special case if amount == 0, withdraw the full collateral
     function withdraw(bytes32 marketId, uint256 amount) external {
         require(markets[marketId].lastUpdate != 0, "LendCore: invalid market");
-        assert(amount < type(uint128).max); // for safe cast
 
         accrueInterest(marketId);
 
-        // TODO: collateral token could be rebasing
-        positions[marketId][msg.sender].collateralTokenBalance -= uint128(amount);
+        address _collateralToken = markets[marketId].collateralToken;
+        uint128 _collateralShares = positions[marketId][msg.sender].collateralShares;
+        uint128 _totalCollateralShares = markets[marketId].totalCollateralShares;
+        uint256 _totalCollateralAssets = IERC20(_collateralToken).balanceOf(address(this));
+        uint256 shares;
+        if (amount == 0) {
+            shares = _collateralShares;
+            amount = (shares * (_totalCollateralAssets + VIRTUAL_ASSETS)) / (_totalCollateralShares + VIRTUAL_SHARES);
+        } else {
+            shares = (amount * (_totalCollateralShares + VIRTUAL_SHARES) + (_totalCollateralAssets + VIRTUAL_ASSETS - 1)) / (_totalCollateralAssets + VIRTUAL_ASSETS);
+        }
+        assert(shares < type(uint128).max);
+
+        positions[marketId][msg.sender].collateralShares = _collateralShares - uint128(shares);
+        markets[marketId].totalCollateralShares = _totalCollateralShares - uint128(shares);
 
         require(isHealthy(marketId, msg.sender), "LendCore: not healthy");
 
@@ -208,10 +228,10 @@ contract LendCore is CoreRef {
         uint256 _totalBorrowAssets = markets[marketId].totalBorrowAssets;
         uint256 _totalBorrowShares = markets[marketId].totalBorrowShares;
         uint128 _borrowShares = positions[marketId][borrower].borrowShares;
-        uint128 _collateralTokenBalance = uint128(getUserCollateral(marketId, borrower));
+        uint128 _userCollateral = uint128(getUserCollateral(marketId, borrower));
         uint256 seizedAssets;
         if (shares == 0) {
-            seizedAssets = _collateralTokenBalance;
+            seizedAssets = _userCollateral;
             uint256 seizedAssetsQuoted = (seizedAssets * collateralPrice + (1e18 - 1)) / 1e18;
             uint256 _liquidationBonus = markets[marketId].liquidationBonus;
             uint256 _assetsToRepay = (seizedAssetsQuoted * 1e18 + (_liquidationBonus - 1)) / _liquidationBonus;
@@ -234,14 +254,21 @@ contract LendCore is CoreRef {
             _totalBorrowAssets = uint128(_totalBorrowAssets - repaidAssets);
         }
 
-        assert(seizedAssets < type(uint128).max); // for safe cast
-        // TODO: collateral token could be rebasing
-        positions[marketId][borrower].collateralTokenBalance = _collateralTokenBalance - uint128(seizedAssets);
+        // reduce collateral amount of borrower
+        address _collateralToken = markets[marketId].collateralToken;
+        {
+            uint128 _totalCollateralShares = markets[marketId].totalCollateralShares;
+            uint256 _totalCollateralAssets = IERC20(_collateralToken).balanceOf(address(this));
+            uint256 collateralSharesSeized = (seizedAssets * (_totalCollateralShares + VIRTUAL_SHARES) + (_totalCollateralAssets + VIRTUAL_ASSETS - 1)) / (_totalCollateralAssets + VIRTUAL_ASSETS);
+            assert(collateralSharesSeized < type(uint128).max); // for safe cast
+            positions[marketId][borrower].collateralShares -= uint128(collateralSharesSeized);
+            markets[marketId].totalCollateralShares = _totalCollateralShares - uint128(collateralSharesSeized);
+        }
 
         ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, repaidAssets);
 
         // if bad debt is created, update share price
-        if (_collateralTokenBalance == seizedAssets) {
+        if (_userCollateral == seizedAssets) {
             uint256 badDebtAssets = ((_borrowShares - uint128(shares)) * (_totalBorrowAssets + VIRTUAL_ASSETS) + (_totalBorrowShares + VIRTUAL_SHARES - 1)) / (_totalBorrowShares + VIRTUAL_SHARES);
             if (badDebtAssets > _totalBorrowAssets) {
                 badDebtAssets = _totalBorrowAssets;
@@ -270,7 +297,7 @@ contract LendCore is CoreRef {
         emit WithdrawCollateral(block.timestamp, marketId, borrower, seizedAssets);
         emit Repay(block.timestamp, marketId, borrower, repaidAssets);
 
-        IERC20(markets[marketId].collateralToken).safeTransfer(msg.sender, seizedAssets);
+        IERC20(_collateralToken).safeTransfer(msg.sender, seizedAssets);
     }
 
     function accrueInterest(bytes32 marketId) public {
@@ -312,8 +339,11 @@ contract LendCore is CoreRef {
     }
     
     function getUserCollateral(bytes32 marketId, address user) public view returns (uint256) {
-        // TODO: collateral token could be rebasing
-        return positions[marketId][user].collateralTokenBalance;
+        address _collateralToken = markets[marketId].collateralToken;
+        uint256 _collateralShares = positions[marketId][user].collateralShares;
+        uint256 _totalCollateralShares = markets[marketId].totalCollateralShares;
+        uint256 _totalCollateralAssets = IERC20(_collateralToken).balanceOf(address(this));
+        return (_collateralShares * (_totalCollateralAssets + VIRTUAL_ASSETS)) / (_totalCollateralShares + VIRTUAL_SHARES);
     }
 
     function getDebt(bytes32 marketId, address user) public view returns (uint256) {
