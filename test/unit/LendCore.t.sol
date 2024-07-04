@@ -32,9 +32,9 @@ contract LendCoreUnitTest is Test {
         core = new Core();
         lend = new LendCore(address(core));
         c = new ERCXXX();
-        c.initialize(address(core), "Collateral Token", "WETH");
+        c.initialize(address(core), "Collateral Token", "WETH", 18);
         d = new ERCXXX();
-        d.initialize(address(core), "Debt Token", "USDC");
+        d.initialize(address(core), "Debt Token", "USDC", 18);
         o = new OracleFixedPrice(address(core), 3600e18 / 1e12); // 12 decimals of normalization;
         irm = new IRMFixedAPR(address(core), uint256(0.1e18) / 365 days); // 10% APR
 

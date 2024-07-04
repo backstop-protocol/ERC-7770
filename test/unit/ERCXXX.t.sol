@@ -21,7 +21,7 @@ contract ERCXXXUnitTest is Test {
         core.grantRole(CoreRoles.MANAGE_LEVERAGE_PARAMS, address(this));
         core.grantRole(CoreRoles.LENDING_MARKET, address(this));
         t = new ERCXXX();
-        t.initialize(address(core), "Token", "TKN");
+        t.initialize(address(core), "Token", "TKN", 18);
         t.setBorrowBlacklist(bobby, true);
         t.setBorrowBlacklist(danny, true);
     }
@@ -29,6 +29,7 @@ contract ERCXXXUnitTest is Test {
     function testInitialState() public view {
         assertEq(t.name(), "Token");
         assertEq(t.symbol(), "TKN");
+        assertEq(t.decimals(), 18);
         assertEq(t.borrowBlacklist(address(0)), true);
         assertEq(t.borrowBlacklist(alice), false);
         assertEq(t.borrowBlacklist(bobby), true);

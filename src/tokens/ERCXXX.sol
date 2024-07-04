@@ -14,6 +14,32 @@ import {console} from "forge-std/Test.sol";
 /// b) totalBorrowableSupply == totalBorrowedSupply + currentBorrowableSupply
 /// c) sum(balanceOf(...users)) <= totalSupply()
 contract ERCXXX is CoreRef, ERC20 {
+    // Domain typehash
+    bytes32 public constant DOMAIN_TYPEHASH =
+        keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+        );
+    // Permit typehash
+    bytes32 public constant PERMIT_TYPEHASH =
+        keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+        );
+
+    // Version
+    string public constant VERSION = "1";
+
+    // Chain id on deployment
+    uint256 public deploymentChainId;
+
+    // Domain separator calculated on deployment
+    bytes32 private _DEPLOYMENT_DOMAIN_SEPARATOR;
+
+    // PolygonZkEVM Bridge address
+    address public bridgeAddress;
+
+    // Permit nonces
+    mapping(address => uint256) public nonces;
+
     /// @notice Starting sharePrice upon deployment
     uint256 internal constant SHARE_PRICE_PRECISION = 1e18;
 
@@ -38,15 +64,18 @@ contract ERCXXX is CoreRef, ERC20 {
     // ERC20 name & symbol (private in OZ implementation)
     string internal _name;
     string internal _symbol;
+    uint8 internal _decimals;
 
     constructor() ERC20("", "") {}
 
     /// @notice initializer
+    /// can only be called by a minter
     function initialize(
         address _core,
         string calldata erc20name,
-        string calldata erc20symbol
-    ) public virtual {
+        string calldata erc20symbol,
+        uint8 __decimals
+    ) public virtual onlyCoreRole(CoreRoles.MINTER) {
         // can initialize only once
         assert(address(core()) == address(0));
         assert(_core != address(0));
@@ -54,10 +83,14 @@ contract ERCXXX is CoreRef, ERC20 {
         // initialize storage
         _name = erc20name;
         _symbol = erc20symbol;
+        _decimals = __decimals;
         _setCore(_core);
         sharePrice = SHARE_PRICE_PRECISION;
         maxBorrowSupplyToRealSupplyRatio = 1e18;
         borrowBlacklist[address(0)] = true;
+        deploymentChainId = block.chainid;
+        _DEPLOYMENT_DOMAIN_SEPARATOR = _calculateDomainSeparator(block.chainid);
+        bridgeAddress = msg.sender;
     }
 
     function name() public view override returns (string memory) {
@@ -68,12 +101,84 @@ contract ERCXXX is CoreRef, ERC20 {
         return _symbol;
     }
 
-    function _shares2underlying(uint256 shares) internal view returns (uint256) {
-        return shares * sharePrice / SHARE_PRICE_PRECISION;
+    function decimals() public view virtual override returns (uint8) {
+        return _decimals;
     }
-    function _underlying2shares(uint256 underlying) internal view returns (uint256) {
+
+    // Permit relative functions
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        require(block.timestamp <= deadline, "ERCXXX::permit: Expired permit");
+
+        bytes32 hashStruct = keccak256(
+            abi.encode(
+                PERMIT_TYPEHASH,
+                owner,
+                spender,
+                value,
+                nonces[owner]++,
+                deadline
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), hashStruct)
+        );
+
+        address signer = ecrecover(digest, v, r, s);
+        require(
+            signer != address(0) && signer == owner,
+            "ERCXXX::permit: Invalid signature"
+        );
+
+        _approve(owner, spender, value);
+    }
+
+    /**
+     * @notice Calculate domain separator, given a chainID.
+     * @param chainId Current chainID
+     */
+    function _calculateDomainSeparator(
+        uint256 chainId
+    ) private view returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    DOMAIN_TYPEHASH,
+                    keccak256(bytes(name())),
+                    keccak256(bytes(VERSION)),
+                    chainId,
+                    address(this)
+                )
+            );
+    }
+
+    /// @dev Return the DOMAIN_SEPARATOR.
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return
+            block.chainid == deploymentChainId
+                ? _DEPLOYMENT_DOMAIN_SEPARATOR
+                : _calculateDomainSeparator(block.chainid);
+    }
+
+    function _shares2underlying(
+        uint256 shares
+    ) internal view returns (uint256) {
+        return (shares * sharePrice) / SHARE_PRICE_PRECISION;
+    }
+
+    function _underlying2shares(
+        uint256 underlying
+    ) internal view returns (uint256) {
         if (sharePrice == 0) return 0;
-        return underlying * SHARE_PRICE_PRECISION / sharePrice;
+        return (underlying * SHARE_PRICE_PRECISION) / sharePrice;
     }
 
     function balanceOf(address account) public view override returns (uint256) {
@@ -87,7 +192,9 @@ contract ERCXXX is CoreRef, ERC20 {
     }
 
     function totalBorrowableSupply() public view returns (uint256) {
-        return _shares2underlying(totalBorrowableShares) * maxBorrowSupplyToRealSupplyRatio / 1e18;
+        return
+            (_shares2underlying(totalBorrowableShares) *
+                maxBorrowSupplyToRealSupplyRatio) / 1e18;
     }
 
     function currentBorrowableSupply() public view returns (uint256) {
@@ -98,7 +205,11 @@ contract ERCXXX is CoreRef, ERC20 {
         return totalSupply() - totalBorrowedSupply;
     }
 
-    function _update(address from, address to, uint256 value) internal override {
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal override {
         uint256 shares = _underlying2shares(value);
         // keep the borrowable supply up to date
         if (!borrowBlacklist[from] && borrowBlacklist[to]) {
@@ -110,23 +221,44 @@ contract ERCXXX is CoreRef, ERC20 {
         ERC20._update(from, to, shares);
     }
 
-    function mint(address account, uint256 value) public onlyCoreRole(CoreRoles.MINTER) {
+    function mint(
+        address account,
+        uint256 value
+    ) public onlyCoreRole(CoreRoles.MINTER) {
         _mint(account, value);
     }
 
-    function setBorrowBlacklist(address account, bool value) public onlyCoreRole(CoreRoles.MANAGE_BORROW_BLACKLIST) {
+    // TODO: implement burn
+    function burn(
+        address account,
+        uint256 value
+    ) public onlyCoreRole(CoreRoles.MINTER) {
+        _burn(account, value);
+    }
+
+    function setBorrowBlacklist(
+        address account,
+        bool value
+    ) public onlyCoreRole(CoreRoles.MANAGE_BORROW_BLACKLIST) {
         borrowBlacklist[account] = value;
     }
 
-    function setMaxBorrowSupplyToRealSupplyRatio(uint256 value) public onlyCoreRole(CoreRoles.MANAGE_LEVERAGE_PARAMS) {
+    function setMaxBorrowSupplyToRealSupplyRatio(
+        uint256 value
+    ) public onlyCoreRole(CoreRoles.MANAGE_LEVERAGE_PARAMS) {
         maxBorrowSupplyToRealSupplyRatio = value;
     }
 
-    function setSharePrice(uint256 value) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
+    function setSharePrice(
+        uint256 value
+    ) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
         sharePrice = value;
     }
 
-    function mintForBorrow(address to, uint256 amount) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
+    function mintForBorrow(
+        address to,
+        uint256 amount
+    ) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
         uint256 _totalBorrowedSupply = totalBorrowedSupply;
         require(
             _totalBorrowedSupply + amount <= totalBorrowableSupply(),
@@ -141,7 +273,10 @@ contract ERCXXX is CoreRef, ERC20 {
         totalBorrowableShares = _totalBorrowableShares;
     }
 
-    function burnForRepay(address from, uint256 amount) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
+    function burnForRepay(
+        address from,
+        uint256 amount
+    ) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
         uint256 _totalBorrowedSupply = totalBorrowedSupply;
         if (amount > _totalBorrowedSupply) {
             totalBorrowedSupply = 0;
