@@ -75,7 +75,7 @@ contract ERCXXX is CoreRef, ERC20 {
         string calldata erc20name,
         string calldata erc20symbol,
         uint8 __decimals
-    ) public virtual onlyCoreRole(CoreRoles.MINTER) {
+    ) public virtual {
         // can initialize only once
         assert(address(core()) == address(0));
         assert(_core != address(0));
