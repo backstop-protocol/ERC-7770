@@ -21,12 +21,11 @@ contract DeployToken is Script {
         vm.startBroadcast(PRIVATE_KEY);
         // TestnetToken LCT = new TestnetToken("Lend Chain Token", "LCT", 18);
         // LCT.mint(0xD2a43D48B92EcFcf971bA0401B7243429b7A78C8, 1_000_000e18);
-
         
         TestnetToken collateralToken = new TestnetToken("Collateral Token", "ColTok", 18);
-        collateralToken.mint(0xD2a43D48B92EcFcf971bA0401B7243429b7A78C8, 5_000_000e18);
+        collateralToken.mint(0xE34aaF64b29273B7D567FCFc40544c014EEe9970, 5_000_000e18);
         TestnetToken debtToken = new TestnetToken("Debt Token", "DebTok", 18);
-        debtToken.mint(0xD2a43D48B92EcFcf971bA0401B7243429b7A78C8, 2_000_000e18);
+        debtToken.mint(0xE34aaF64b29273B7D567FCFc40544c014EEe9970, 2_000_000e18);
         vm.stopBroadcast();
     }
 }
