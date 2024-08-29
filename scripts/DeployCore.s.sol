@@ -18,14 +18,18 @@ contract DeployCore is Script {
 
         BRIDGE_ADDRESS = vm.envOr(
             "BRIDGE_ADDRESS",
-            0xa6f463420022210d34BAC97c5BaaeD53576A6876
+            address(0)
         );
+
+        if (BRIDGE_ADDRESS == address(0)) {
+            revert("BRIDGE_ADDRESS is not set");
+        }
     }
 
     function run() public {
         _parseEnv();
         console.log("Deploying using address %s", vm.addr(PRIVATE_KEY));
-        console.log("Giving minter role to bridge address %s", vm.addr(BRIDGE_ADDRESS));
+        console.log("Giving minter role to bridge address %s", BRIDGE_ADDRESS);
         vm.startBroadcast(PRIVATE_KEY);
         Core core = new Core();
         core.grantRole(CoreRoles.MINTER, BRIDGE_ADDRESS);

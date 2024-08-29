@@ -69,7 +69,6 @@ contract ERCXXX is CoreRef, ERC20 {
     constructor() ERC20("", "") {}
 
     /// @notice initializer
-    /// can only be called by a minter
     function initialize(
         address _core,
         string calldata erc20name,
