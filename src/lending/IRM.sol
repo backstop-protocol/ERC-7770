@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.13;
 
-/// @notice Stateful Interest Rate Module
+/// @notice Stateless Interest Rate Module
 abstract contract IRM {
     /// Interest rate per second, expressed with 18 decimals
     /// E.g. 4% APR would be 0.04e18 / (365 * 24 * 3600) ~= 1268391679

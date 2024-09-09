@@ -71,9 +71,6 @@ contract LendCore is CoreRef {
         _mkt.totalCollateralShares = uint128(0);
         markets[marketId] = _mkt;
 
-        // ping IRM
-        IRM(mkt.irm).ratePerSecond(marketId);
-
         emit MarketCreate(block.timestamp, marketId, mkt);
     }
 
