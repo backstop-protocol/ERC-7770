@@ -211,11 +211,11 @@ contract ERC7770 is CoreRef, ERC20 {
 
     /// Is it really that?
     function requiredReserveRatio() external view returns (uint256) {
-        return maxBorrowSupplyToRealSupplyRatio;
+        return 1e36 / maxBorrowSupplyToRealSupplyRatio;
     }
 
 
-    /// ERC777 conformity
+    /// ERC7770 conformity
     function segregatedAccount(address _account) external view returns (bool) {
         return borrowBlacklist[_account];
     }
