@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {IRM} from "./IRM.sol";
 import {Oracle} from "./Oracle.sol";
-import {ERCXXX} from "../tokens/ERCXXX.sol";
+import {ERC7770} from "../tokens/ERC7770.sol";
 import {CoreRef} from "../core/CoreRef.sol";
 import {CoreRoles} from "../core/CoreRoles.sol";
 
@@ -173,7 +173,7 @@ contract LendCore is CoreRef {
 
         emit Borrow(block.timestamp, marketId, msg.sender, amount);
 
-        ERCXXX(markets[marketId].debtToken).mintForBorrow(msg.sender, amount);
+        ERC7770(markets[marketId].debtToken).fractionalReserveMint(msg.sender, amount);
     }
 
     /// @dev special case if amount == 0, repay the full position
@@ -205,7 +205,7 @@ contract LendCore is CoreRef {
 
         emit Repay(block.timestamp, marketId, msg.sender, amount);
 
-        ERCXXX(markets[marketId].debtToken).burnForRepay(msg.sender, amount);
+        ERC7770(markets[marketId].debtToken).fractionalReserveBurn(msg.sender, amount);
     }
 
     /// @dev special case if shares == 0, get the full collateral and repay only part of
@@ -259,7 +259,7 @@ contract LendCore is CoreRef {
 
         // burn of debt repaid has to happen before sharePrice update if there
         // is bad debt created during this liquidation
-        ERCXXX(mkt.debtToken).burnForRepay(msg.sender, repaidAssets);
+        ERC7770(mkt.debtToken).fractionalReserveBurn(msg.sender, repaidAssets);
 
         // if bad debt is created, update share price
         if (_userCollateral == seizedAssets) {
@@ -273,14 +273,14 @@ contract LendCore is CoreRef {
             mkt.totalBorrowShares -= pos.borrowShares;
             pos.borrowShares = 0;
 
-            // update ERCXXX share price
-            uint256 _sharePrice = ERCXXX(mkt.debtToken).sharePrice();
-            uint256 _totalSupply = ERCXXX(mkt.debtToken).totalSupply();
+            // update ERC7770 share price
+            uint256 _sharePrice = ERC7770(mkt.debtToken).sharePrice();
+            uint256 _totalSupply = ERC7770(mkt.debtToken).totalSupply();
             if (badDebtAssets > _totalSupply) {
                 // should never be reachable
-                ERCXXX(mkt.debtToken).setSharePrice(0);
+                ERC7770(mkt.debtToken).setSharePrice(0);
             } else {
-                ERCXXX(mkt.debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
+                ERC7770(mkt.debtToken).setSharePrice(_sharePrice * (_totalSupply - badDebtAssets) / _totalSupply);
             }
 
             emit Liquidate(block.timestamp, marketId, borrower, badDebtAssets);
@@ -312,12 +312,12 @@ contract LendCore is CoreRef {
         assert(fee < type(uint128).max); // for safe cast
         markets[marketId].lastUpdate = uint96(block.timestamp);
 
-        // update ERCXXX share price
+        // update ERC7770 share price
         address _debtToken = markets[marketId].debtToken;
-        uint256 _sharePrice = ERCXXX(_debtToken).sharePrice();
-        uint256 _totalSupply = ERCXXX(_debtToken).totalSupply();
-        ERCXXX(_debtToken).setSharePrice(_sharePrice * (_totalSupply + interest - fee) / _totalSupply);
-        ERCXXX(_debtToken).mint(markets[marketId].feeRecipient, fee);
+        uint256 _sharePrice = ERC7770(_debtToken).sharePrice();
+        uint256 _totalSupply = ERC7770(_debtToken).totalSupply();
+        ERC7770(_debtToken).setSharePrice(_sharePrice * (_totalSupply + interest - fee) / _totalSupply);
+        ERC7770(_debtToken).mint(markets[marketId].feeRecipient, fee);
 
         emit AccrueInterest(block.timestamp, marketId, interest, fee);
     }

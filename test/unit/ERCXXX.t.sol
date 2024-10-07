@@ -4,11 +4,11 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {Core} from "../../src/core/Core.sol";
 import {CoreRoles} from "../../src/core/CoreRoles.sol";
-import {ERCXXX} from "../../src/tokens/ERCXXX.sol";
+import {ERC7770} from "../../src/tokens/ERC7770.sol";
 
-contract ERCXXXUnitTest is Test {
+contract ERC7770UnitTest is Test {
     Core public core;
-    ERCXXX public t;
+    ERC7770 public t;
     address public alice = address(0xaaa);
     address public bobby = address(0xbbb);
     address public carol = address(0xccc);
@@ -20,7 +20,7 @@ contract ERCXXXUnitTest is Test {
         core.grantRole(CoreRoles.MANAGE_BORROW_BLACKLIST, address(this));
         core.grantRole(CoreRoles.MANAGE_LEVERAGE_PARAMS, address(this));
         core.grantRole(CoreRoles.LENDING_MARKET, address(this));
-        t = new ERCXXX();
+        t = new ERC7770();
         t.initialize(address(core), "Token", "TKN", 18);
         t.setBorrowBlacklist(bobby, true);
         t.setBorrowBlacklist(danny, true);
@@ -65,7 +65,7 @@ contract ERCXXXUnitTest is Test {
         assertEq(t.balanceOf(danny), 100);
 
         // danny borrows
-        t.mintForBorrow(danny, 70);
+        t.fractionalReserveMint(danny, 70);
 
         assertEq(t.totalSupply(), 320);
         assertEq(t.realTotalSupply(), 250);
@@ -78,7 +78,7 @@ contract ERCXXXUnitTest is Test {
         assertEq(t.balanceOf(danny), 170);
 
         // danny repays 70 principal + 70 interest
-        t.burnForRepay(danny, 140);
+        t.fractionalReserveBurn(danny, 140);
 
         assertEq(t.totalSupply(), 180);
         assertEq(t.realTotalSupply(), 180);

@@ -8,16 +8,16 @@ library CoreRoles {
     /// @notice the all-powerful role. Controls all other roles.
     bytes32 internal constant ADMIN = keccak256("ADMIN_ROLE");
 
-    /// @notice can call ERCXXX.mint()
+    /// @notice can call ERC7770.mint()
     bytes32 internal constant MINTER = keccak256("MINTER_ROLE");
 
-    /// @notice can call ERCXXX.setBorrowBlacklist()
+    /// @notice can call ERC7770.setBorrowBlacklist()
     bytes32 internal constant MANAGE_BORROW_BLACKLIST = keccak256("MANAGE_BORROW_BLACKLIST_ROLE");
 
-    /// @notice can call ERCXXX.setMaxBorrowSupplyToRealSupplyRatio()
+    /// @notice can call ERC7770.setMaxBorrowSupplyToRealSupplyRatio()
     bytes32 internal constant MANAGE_LEVERAGE_PARAMS = keccak256("MANAGE_LEVERAGE_PARAMS_ROLE");
 
-    /// @notice can call ERCXXX.setSharePrice(), ERCXXX.mintForBorrow(), and ERCXXX.burnForRepay()
+    /// @notice can call ERC7770.setSharePrice(), ERC7770.fractionalReserveMint(), and ERC7770.fractionalReserveBurn()
     bytes32 internal constant LENDING_MARKET = keccak256("LENDING_MARKET_ROLE");
 
     /// @notice can call LendCore.createMarket()

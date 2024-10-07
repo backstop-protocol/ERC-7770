@@ -13,7 +13,12 @@ import {console} from "forge-std/Test.sol";
 /// a) totalSupply == realTotalSupply + totalBorrowedSupply
 /// b) totalBorrowableSupply == totalBorrowedSupply + currentBorrowableSupply
 /// c) sum(balanceOf(...users)) <= totalSupply()
-contract ERCXXX is CoreRef, ERC20 {
+contract ERC7770 is CoreRef, ERC20 {
+    // events
+    event MintFractionalReserve(address indexed minter, address to, uint256 amount);
+    event BurnFractionalReserve(address indexed burner, address from, uint256 amount);
+    event SetSegregatedAccount(address account, bool segregated);
+
     // Domain typehash
     bytes32 public constant DOMAIN_TYPEHASH =
         keccak256(
@@ -114,7 +119,7 @@ contract ERCXXX is CoreRef, ERC20 {
         bytes32 r,
         bytes32 s
     ) external {
-        require(block.timestamp <= deadline, "ERCXXX::permit: Expired permit");
+        require(block.timestamp <= deadline, "ERC7770::permit: Expired permit");
 
         bytes32 hashStruct = keccak256(
             abi.encode(
@@ -134,7 +139,7 @@ contract ERCXXX is CoreRef, ERC20 {
         address signer = ecrecover(digest, v, r, s);
         require(
             signer != address(0) && signer == owner,
-            "ERCXXX::permit: Invalid signature"
+            "ERC7770::permit: Invalid signature"
         );
 
         _approve(owner, spender, value);
@@ -204,6 +209,17 @@ contract ERCXXX is CoreRef, ERC20 {
         return totalSupply() - totalBorrowedSupply;
     }
 
+    /// Is it really that?
+    function requiredReserveRatio() external view returns (uint256) {
+        return maxBorrowSupplyToRealSupplyRatio;
+    }
+
+
+    /// ERC777 conformity
+    function segregatedAccount(address _account) external view returns (bool) {
+        return borrowBlacklist[_account];
+    }
+
     function _update(
         address from,
         address to,
@@ -227,12 +243,19 @@ contract ERCXXX is CoreRef, ERC20 {
         _mint(account, value);
     }
 
-    // TODO: implement burn
     function burn(
         address account,
         uint256 value
     ) public onlyCoreRole(CoreRoles.MINTER) {
         _burn(account, value);
+    }
+
+    function updateSegregatedAccount(
+        address account,
+        bool value
+    ) public onlyCoreRole(CoreRoles.MANAGE_BORROW_BLACKLIST) {
+        setBorrowBlacklist(account, value);
+        emit SetSegregatedAccount(account, value);
     }
 
     function setBorrowBlacklist(
@@ -241,7 +264,6 @@ contract ERCXXX is CoreRef, ERC20 {
     ) public onlyCoreRole(CoreRoles.MANAGE_BORROW_BLACKLIST) {
         borrowBlacklist[account] = value;
     }
-
     function setMaxBorrowSupplyToRealSupplyRatio(
         uint256 value
     ) public onlyCoreRole(CoreRoles.MANAGE_LEVERAGE_PARAMS) {
@@ -254,14 +276,14 @@ contract ERCXXX is CoreRef, ERC20 {
         sharePrice = value;
     }
 
-    function mintForBorrow(
+    function fractionalReserveMint(
         address to,
         uint256 amount
     ) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
         uint256 _totalBorrowedSupply = totalBorrowedSupply;
         require(
             _totalBorrowedSupply + amount <= totalBorrowableSupply(),
-            "ERCXXX: borrow cap reached"
+            "ERC7770: borrow cap reached"
         );
 
         totalBorrowedSupply = _totalBorrowedSupply + amount;
@@ -270,9 +292,10 @@ contract ERCXXX is CoreRef, ERC20 {
         uint256 _totalBorrowableShares = totalBorrowableShares;
         _mint(to, amount);
         totalBorrowableShares = _totalBorrowableShares;
+        emit MintFractionalReserve(msg.sender, to, amount);
     }
 
-    function burnForRepay(
+    function fractionalReserveBurn(
         address from,
         uint256 amount
     ) public onlyCoreRole(CoreRoles.LENDING_MARKET) {
@@ -287,5 +310,6 @@ contract ERCXXX is CoreRef, ERC20 {
         uint256 _totalBorrowableShares = totalBorrowableShares;
         _burn(from, amount);
         totalBorrowableShares = _totalBorrowableShares;
+        emit BurnFractionalReserve(msg.sender, from, amount);
     }
 }
