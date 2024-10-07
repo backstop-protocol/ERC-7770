@@ -211,7 +211,7 @@ contract ERC7770 is CoreRef, ERC20 {
 
     /// Is it really that?
     function requiredReserveRatio() external view returns (uint256) {
-        return 1e36 / maxBorrowSupplyToRealSupplyRatio;
+        return 1e36 / (1e18 + maxBorrowSupplyToRealSupplyRatio);
     }
 
 
