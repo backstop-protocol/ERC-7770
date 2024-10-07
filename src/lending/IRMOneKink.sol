@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IRM} from "./IRM.sol";
 import {LendCore} from "./LendCore.sol";
-import {ERCXXX} from "../tokens/ERCXXX.sol";
+import {ERC7770} from "../tokens/ERC7770.sol";
 
 contract IRMOneKink is IRM {
     address public immutable LEND_CORE;
@@ -27,8 +27,8 @@ contract IRMOneKink is IRM {
 
     function ratePerSecond(bytes32 marketId) external override view returns (uint256) {
         address debtToken = LendCore(LEND_CORE).getMarket(marketId).debtToken;
-        uint256 borrowed = ERCXXX(debtToken).totalBorrowedSupply();
-        uint256 borrowCap = ERCXXX(debtToken).totalBorrowableSupply();
+        uint256 borrowed = ERC7770(debtToken).totalBorrowedSupply();
+        uint256 borrowCap = ERC7770(debtToken).totalBorrowableSupply();
         return ratePerSecond(borrowed * 1e18 / borrowCap);
     }
 

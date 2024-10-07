@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {Core} from "../../src/core/Core.sol";
 import {CoreRoles} from "../../src/core/CoreRoles.sol";
-import {ERCXXX} from "../../src/tokens/ERCXXX.sol";
+import {ERC7770} from "../../src/tokens/ERC7770.sol";
 import {LendCore} from "../../src/lending/LendCore.sol";
 import {OracleFixedPrice} from "../../src/lending/OracleFixedPrice.sol";
 import {IRMFixedAPR} from "../../src/lending/IRMFixedAPR.sol";
@@ -12,8 +12,8 @@ import {IRMFixedAPR} from "../../src/lending/IRMFixedAPR.sol";
 contract LendCoreUnitTest is Test {
     Core public core;
     LendCore public lend;
-    ERCXXX public c;
-    ERCXXX public d;
+    ERC7770 public c;
+    ERC7770 public d;
     OracleFixedPrice public o;
     IRMFixedAPR public irm;
 
@@ -31,9 +31,9 @@ contract LendCoreUnitTest is Test {
 
         core = new Core();
         lend = new LendCore(address(core));
-        c = new ERCXXX();
+        c = new ERC7770();
         c.initialize(address(core), "Collateral Token", "WETH", 18);
-        d = new ERCXXX();
+        d = new ERC7770();
         d.initialize(address(core), "Debt Token", "USDC", 6);
         o = new OracleFixedPrice(address(core), 3600e18 / 1e12); // 12 decimals of normalization;
         irm = new IRMFixedAPR(address(core), uint256(0.1e18) / 365 days); // 10% APR
