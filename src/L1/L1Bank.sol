@@ -45,18 +45,20 @@ contract L1Bank is ERC4626, Ownable {
     ) public onlyOwner returns (address) {
         RelendWTokenL1 token = new RelendWTokenL1(asset(), _name, _symbol, bridge, l2Token, l2Receiver);
         created[address(token)] = true;
+        IERC20(asset()).approve(address(token), type(uint256).max);
         return address(token);
     }
 
     function fundWToken(uint256 assets, address wToken) public onlyOwner {
         require(created[wToken], "L1Bank: unknown wToken");
         assetsDeployed += int256(assets);
-        SafeERC20.safeTransfer(IERC20(asset()), wToken, assets);
+        require(RelendWTokenL1(wToken).depositFor(address(this), assets), "TODO error event");
     }
 
+    // TODO - not sure what this function does
     function reportPnL(address wToken, int256 pnl) public onlyOwner {
         if (pnl > 0) {
-            RelendWTokenL1(wToken).burnFrom(msg.sender, uint256(pnl));
+            RelendWTokenL1(wToken).withdrawTo(msg.sender, uint256(pnl));
         }
         assetsDeployed += pnl;
     }
