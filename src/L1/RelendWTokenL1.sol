@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 
 interface IOptimismBridge {
     function depositERC20To(
@@ -18,8 +19,7 @@ interface IOptimismBridge {
     ) external;
 }
 
-contract RelendWTokenL1 is ERC20, ERC20Burnable, Ownable {
-    address public immutable asset;
+contract RelendWTokenL1 is ERC20Wrapper, ERC20Burnable, Ownable {
     address public immutable bridge;
     address public immutable l2Token;
     address public immutable l2Receiver;
@@ -31,16 +31,10 @@ contract RelendWTokenL1 is ERC20, ERC20Burnable, Ownable {
         address _bridge,
         address _l2Token,
         address _l2Receiver
-    ) ERC20(_name, _symbol) Ownable(msg.sender) {
-        asset = _asset;
+    ) ERC20(_name, _symbol) ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {
         bridge = _bridge;
         l2Token = _l2Token;
         l2Receiver = _l2Receiver;
-    }
-
-    function redeem(uint256 amount) external {
-        _burn(msg.sender, amount);
-        SafeERC20.safeTransfer(IERC20(asset), msg.sender, amount);
     }
 
     function mintOnL2(uint256 amount, uint32 minGasLimit) public onlyOwner {
@@ -54,5 +48,10 @@ contract RelendWTokenL1 is ERC20, ERC20Burnable, Ownable {
             _minGasLimit: minGasLimit,
             _extraData: ""
         });
+    }
+
+    // TODO - should we remove burnable?
+    function decimals() public view override(ERC20, ERC20Wrapper) returns(uint8) {
+        return ERC20Wrapper.decimals();
     }
 }
