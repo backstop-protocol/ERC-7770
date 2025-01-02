@@ -6,7 +6,7 @@ import {Core} from "../src/core/Core.sol";
 import {CoreRoles} from "../src/core/CoreRoles.sol";
 import {LendCore} from "../src/lending/LendCore.sol";
 
-// forge script ./scripts/DeployCore.s.sol:DeployCore --rpc-url https://rpc.kred.la-tribu.xyz --slow --legacy --verify --verifier blockscout --verifier-url 'https://explorer.kred.la-tribu.xyz/api/'
+// forge script ./scripts/DeployCore.s.sol:DeployCore --rpc-url https://l2.rpc.testnet.relend.network --legacy --verify --verifier blockscout --verifier-url 'https://l2.explorer.testnet.relend.network/api/'
 contract DeployCore is Script {
     uint256 public PRIVATE_KEY;
     address BRIDGE_ADDRESS ;

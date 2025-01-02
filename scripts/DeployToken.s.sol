@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "@forge-std/Script.sol";
 import {TestnetToken} from "../src/tokens/TestnetToken.sol";
 
+// forge script ./scripts/DeployToken.s.sol:DeployToken --rpc-url https://l1.rpc.testnet.relend.network --legacy --verify --verifier blockscout --verifier-url 'https://l1.explorer.testnet.relend.network/api/'
 contract DeployToken is Script {
     uint256 public PRIVATE_KEY;
 
@@ -19,13 +20,10 @@ contract DeployToken is Script {
         _parseEnv();
         console.log("Deploying using address %s", vm.addr(PRIVATE_KEY));
         vm.startBroadcast(PRIVATE_KEY);
-        // TestnetToken LCT = new TestnetToken("Lend Chain Token", "LCT", 18);
-        // LCT.mint(0xD2a43D48B92EcFcf971bA0401B7243429b7A78C8, 1_000_000e18);
-        
-        TestnetToken collateralToken = new TestnetToken("Collateral Token", "ColTok", 18);
-        collateralToken.mint(0xE34aaF64b29273B7D567FCFc40544c014EEe9970, 5_000_000e18);
-        TestnetToken debtToken = new TestnetToken("Debt Token", "DebTok", 18);
-        debtToken.mint(0xE34aaF64b29273B7D567FCFc40544c014EEe9970, 2_000_000e18);
+        TestnetToken USDC = new TestnetToken("Circle USDC", "USDC", 6, 10_000e6);
+        TestnetToken USDT = new TestnetToken("Tether USDT", "USDT", 6, 10_000e6);
+        TestnetToken WBTC = new TestnetToken("Wrapped Bitcoin", "WBTC", 8, 1e8);
+        TestnetToken WETH = new TestnetToken("Wrapped Ethereum", "WETH", 18, 10e18);
         vm.stopBroadcast();
     }
 }

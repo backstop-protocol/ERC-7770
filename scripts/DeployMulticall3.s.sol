@@ -3,7 +3,8 @@ pragma solidity 0.8.12;
 
 import {Script, console} from "@forge-std/Script.sol";
 import {Multicall3} from "@multicall/Multicall3.sol";
-// forge script ./scripts/DeployMulticall3.s.sol:DeployMulticall3 --rpc-url https://rpc.kred.la-tribu.xyz --slow --legacy --verify --verifier blockscout --verifier-url 'https://explorer.kred.la-tribu.xyz/api/'
+// forge script ./scripts/DeployMulticall3.s.sol:DeployMulticall3 --rpc-url https://l2.rpc.testnet.relend.network --slow --legacy --verify --verifier blockscout --verifier-url 'https://l2.explorer.testnet.relend.network/api/'
+// forge script ./scripts/DeployMulticall3.s.sol:DeployMulticall3 --rpc-url https://l1.rpc.testnet.relend.network --slow --legacy --verify --verifier blockscout --verifier-url 'https://l1.explorer.testnet.relend.network/api/'
 contract DeployMulticall3 is Script {
     uint256 public PRIVATE_KEY;
     
