@@ -20,6 +20,12 @@ contract PermissionedWrapper is ERC20Wrapper, Ownable {
     }
 }
 
+contract FixedOracle {
+    function price() external pure returns(uint256) {
+        return 1.03e36;
+    }
+}
+
 contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
     using SafeERC20 for IERC20;
 
@@ -32,25 +38,27 @@ contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCal
     mapping(address => WTokenData) public wTokenData;
 
     IMorpho immutable public MORPHO;
+    FixedOracle immutable public FIXED_ORACLE;
 
     constructor(IMorpho _morphoBlue) Ownable(msg.sender) {
         MORPHO = _morphoBlue;
+        FIXED_ORACLE = new FixedOracle();
     }
 
     // if wtoken is already listed then it is ok to override it
-    function listWToken(address _wtoken, uint _morphoLLTV, address _morphoOracle) onlyOwner public {
-        // TODO - calculate LLTV and oracle in the function
+    function listWToken(address _wtoken) onlyOwner public {
+        require(wTokenData[_wtoken].asset == address(0), "wtoken is already listed");
+
         IERC20 underlyingAsset = RelendWTokenL1(_wtoken).underlying();
 
         PermissionedWrapper wrapper = new PermissionedWrapper(_wtoken);
-        wrapper.transferOwnership(msg.sender);
 
         IMorpho.MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
         marketParams.collateralToken = address(wrapper);
-        marketParams.oracle = _morphoOracle;
+        marketParams.oracle = address(FIXED_ORACLE);
         marketParams.irm = address(0);
-        marketParams.lltv = _morphoLLTV;
+        marketParams.lltv = 0.98e18;
 
         bytes32 marketParamsId;
         assembly ("memory-safe") {
