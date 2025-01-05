@@ -2,7 +2,8 @@
 pragma solidity ^0.8.13;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ERC4626, ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {RelendWTokenL1} from "@src/L1/RelendWTokenL1.sol";
 
@@ -38,12 +39,9 @@ contract L1Bank is ERC4626, Ownable {
 
     function createWToken(
         string memory _name,
-        string memory _symbol,
-        address bridge,
-        address l2Token,
-        address l2Receiver
+        string memory _symbol
     ) public onlyOwner returns (address) {
-        RelendWTokenL1 token = new RelendWTokenL1(asset(), _name, _symbol, bridge, l2Token, l2Receiver);
+        RelendWTokenL1 token = new RelendWTokenL1(asset(), _name, _symbol);
         created[address(token)] = true;
         IERC20(asset()).approve(address(token), type(uint256).max);
         return address(token);
