@@ -15,7 +15,7 @@ contract PermissionedWrapper is ERC20Wrapper, Ownable {
         address _asset
     ) ERC20("name", "symbol") ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {}
 
-    function depositFor(address account, uint256 value) override public returns(bool) {
+    function depositFor(address account, uint256 value) override onlyOwner public returns(bool) {
         return ERC20Wrapper.depositFor(account, value);
     }
 }
