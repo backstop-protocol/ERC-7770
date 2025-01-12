@@ -3,21 +3,32 @@ pragma solidity ^0.8.13;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC7770} from "./interface/IERC7770.sol";
 
+contract Dummy {
+    using Address for address;
 
-contract RelendWTokenL1 is IERC7770, ERC20Wrapper, Ownable {
+    function doArbitrayCall(address target, bytes calldata data) payable external {
+        target.functionCallWithValue(data, msg.value);
+    }
+}
+
+contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, Ownable {
     uint256 private _totalBorrowedSupply;
+    Dummy immutable dummy;
 
     constructor(
         address _asset,
         string memory _name,
         string memory _symbol
-    ) ERC20(_name, _symbol) ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {
+    ) ERC20(_name, _symbol) ERC20Wrapper(IERC20(_asset)) ERC20Permit(_name) Ownable(msg.sender) {
         // setting to 0 for good order
         _totalBorrowedSupply = 0;
+        dummy = new Dummy();
     }
 
     function fractionalReserveMint(address _to, uint256 _amount) onlyOwner external {
@@ -40,9 +51,27 @@ contract RelendWTokenL1 is IERC7770, ERC20Wrapper, Ownable {
         emit BurnFractionalReserve(msg.sender, _from, _amount);
     }
 
+    function depositForAndCall(address account, uint256 value, address callTarget, bytes calldata callData) external payable returns (bool) {
+        require(ERC20Wrapper.depositFor(account, value), "depositFor failed");
+        dummy.doArbitrayCall{value: msg.value}(callTarget, callData);
+
+        return true;
+    }
+
+    function withdrawToAndCall(address account, uint256 value, address callTarget, bytes calldata callData) external payable returns (bool) {
+        require(ERC20Wrapper.withdrawTo(account, value), "withdawTo failed");
+        dummy.doArbitrayCall{value: msg.value}(callTarget, callData);
+
+        return true;
+    }
+
     // getters
     function totalBorrowedSupply() external view returns (uint256) {
         return _totalBorrowedSupply;
+    }
+
+    function decimals() public view override(ERC20, ERC20Wrapper) returns(uint8) {
+        return ERC20Wrapper.decimals();
     }
 
     // the below functions are for competability to the ERC7770 standard.

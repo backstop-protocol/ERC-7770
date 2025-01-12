@@ -13,7 +13,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract PermissionedWrapper is ERC20Wrapper, Ownable {
     constructor(
         address _asset
-    ) ERC20("name", "symbol") ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {}
+    ) ERC20("WrappedWrappedFUSDC", "WWFUSDC") ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {}
 
     function depositFor(address account, uint256 value) override onlyOwner public returns(bool) {
         return ERC20Wrapper.depositFor(account, value);
