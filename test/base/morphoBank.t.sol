@@ -64,17 +64,18 @@ contract BankTest is Test {
 
         usdc = new FakeUSDC(usdcWhale);
 
-        wusdc = new RelendWTokenL1(address(usdc), "WFake USDC", "WUSDC");
-        wusdc.transferOwnership(multisig1);
-/*
-        bank = new MorphoBank(MORPHO);
-        bank.transferOwnership(multisig2);
+        wusdc = new RelendWTokenL1(address(usdc), "WFake USDC", "WUSDC", multisig2);
+
+        bank = new MorphoBank(MORPHO, multisig2);
 
         vm.stopPrank();
 
         // list the new token
         vm.startPrank(multisig2);
+        bank.grantRole(bank.LISTER_ROLE(), multisig2);
+        bank.grantRole(bank.TOPUP_ROLE(), multisig2);    
         bank.listWToken(address(wusdc));
+        wusdc.grantRole(wusdc.CURATOR_ROLE(), multisig1);        
         vm.stopPrank();
 
         // give from whale to morpho and seed the dummy market
@@ -83,13 +84,13 @@ contract BankTest is Test {
         (,,IMorpho.MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
         MORPHO.supply(marketParams, 1e12, 0, usdcWhale, new bytes(0));
         vm.stopPrank();
-*/
+
         // give some usdc to small fish
         vm.startPrank(usdcWhale);
         usdc.transfer(usdcFish, 1e10);
         vm.stopPrank();        
     }
-/*
+
     function testMintWUSDC() public {
         vm.startPrank(usdcFish);
 
@@ -145,7 +146,7 @@ contract BankTest is Test {
 
         vm.stopPrank();
     }
-*/
+/*
     function testStarknetBridge() public {
         vm.startPrank(usdcFish);
 
@@ -164,11 +165,6 @@ contract BankTest is Test {
         wusdc.approve(address(bridge), 1e6);
 
         uint bridgeFees = bridge.estimateDepositFeeWei();
-
-        /*
-        bridge.deposit{value: bridgeFees}(address(wusdc), 1e6, 0x06B63cb1FD1e3A72d046706E5C2497be30a954D167f1f360F4Ea24eECeF4F6B5);
-
-        */
 
         // encode a multicall to mint and bridge to starknet
         // 1) give allowance to the bridge 2) call bridge deposit
@@ -194,6 +190,7 @@ contract BankTest is Test {
 
         vm.stopPrank();        
     }
+    */
 }
 
 

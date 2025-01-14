@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC7770} from "./interface/IERC7770.sol";
@@ -17,21 +17,24 @@ contract Dummy {
     }
 }
 
-contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, Ownable {
+contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, AccessControlDefaultAdminRules {
     uint256 private _totalBorrowedSupply;
     Dummy immutable dummy;
+
+    bytes32 public constant CURATOR_ROLE = keccak256("CURATOR_ROLE");
 
     constructor(
         address _asset,
         string memory _name,
-        string memory _symbol
-    ) ERC20(_name, _symbol) ERC20Wrapper(IERC20(_asset)) ERC20Permit(_name) Ownable(msg.sender) {
+        string memory _symbol,
+        address _admin
+    ) ERC20(_name, _symbol) ERC20Wrapper(IERC20(_asset)) ERC20Permit(_name) AccessControlDefaultAdminRules(0 days, _admin) {
         // setting to 0 for good order
         _totalBorrowedSupply = 0;
         dummy = new Dummy();
     }
 
-    function fractionalReserveMint(address _to, uint256 _amount) onlyOwner external {
+    function fractionalReserveMint(address _to, uint256 _amount) onlyRole(CURATOR_ROLE) external {
         require(_to == msg.sender, "fractionalReserveMint: can only mint to owner wallet");
 
         _mint(_to, _amount);
@@ -41,7 +44,7 @@ contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, Ownable {
         emit MintFractionalReserve(msg.sender, _to, _amount);
     }
 
-    function fractionalReserveBurn(address _from, uint256 _amount) onlyOwner external {
+    function fractionalReserveBurn(address _from, uint256 _amount) onlyRole(CURATOR_ROLE) external {
         require(_from == msg.sender, "fractionalReserveBurn: can only burn own funds");
 
         _burn(_from, _amount);
@@ -86,5 +89,4 @@ contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, Ownable {
     function totalSegregatedSupply() external pure returns (uint256) {
         return 0;
     }
-
 }

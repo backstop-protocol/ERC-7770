@@ -3,31 +3,21 @@ pragma solidity ^0.8.13;
 
 import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IMorpho, IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "./interface/IMorpho.sol";
 import {RelendWTokenL1} from "./RelendWTokenL1.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {PermissionedWrapper} from "./PermissionedWrapper.sol";
+import {FixedPriceOracle} from "./FixedPriceOracle.sol";
 
 
-contract PermissionedWrapper is ERC20Wrapper, Ownable {
-    constructor(
-        address _asset
-    ) ERC20("WrappedWrappedFUSDC", "WWFUSDC") ERC20Wrapper(IERC20(_asset)) Ownable(msg.sender) {}
-
-    function depositFor(address account, uint256 value) override onlyOwner public returns(bool) {
-        return ERC20Wrapper.depositFor(account, value);
-    }
-}
-
-contract FixedOracle {
-    function price() external pure returns(uint256) {
-        return 1.03e36;
-    }
-}
-
-contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
+contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
     using SafeERC20 for IERC20;
+
+    bytes32 public constant LISTER_ROLE = keccak256("LISTER_ROLE");
+    bytes32 public constant TOPUP_ROLE = keccak256("TOPUP_ROLE");    
 
     struct WTokenData {
         address asset;
@@ -38,15 +28,13 @@ contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCal
     mapping(address => WTokenData) public wTokenData;
 
     IMorpho immutable public MORPHO;
-    FixedOracle immutable public FIXED_ORACLE;
 
-    constructor(IMorpho _morphoBlue) Ownable(msg.sender) {
+    constructor(IMorpho _morphoBlue, address _admin) AccessControlDefaultAdminRules(0 days, _admin) {
         MORPHO = _morphoBlue;
-        FIXED_ORACLE = new FixedOracle();
     }
 
     // if wtoken is already listed then it is ok to override it
-    function listWToken(address _wtoken) onlyOwner public {
+    function listWToken(address _wtoken) onlyRole(LISTER_ROLE) public {
         require(wTokenData[_wtoken].asset == address(0), "wtoken is already listed");
 
         IERC20 underlyingAsset = RelendWTokenL1(_wtoken).underlying();
@@ -56,7 +44,7 @@ contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCal
         IMorpho.MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
         marketParams.collateralToken = address(wrapper);
-        marketParams.oracle = address(FIXED_ORACLE);
+        marketParams.oracle = address(new FixedPriceOracle(1.03e36, owner()));
         marketParams.irm = address(0);
         marketParams.lltv = 0.98e18;
 
@@ -85,7 +73,7 @@ contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCal
     }
 
     // topup liquidity
-    function topUpLiquidity(address _wtoken, uint _amount) onlyOwner public {
+    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) public {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
         require(data.asset != address(0), "invalid wtoken");
@@ -110,7 +98,7 @@ contract MorphoBank is Ownable, IMorphoSupplyCollateralCallback, IMorphoRepayCal
     }
 
     // topdown liquidity
-    function topDownLiquidity(address _wtoken, uint _amount) onlyOwner public {
+    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) public {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
         require(data.asset != address(0), "invalid wtoken");
