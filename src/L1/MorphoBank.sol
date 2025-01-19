@@ -7,7 +7,8 @@ import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/ext
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IMorpho, IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "./interface/IMorpho.sol";
+import {IMorpho, MarketParams, Market, Id} from "./../../morpho/src/interfaces/IMorpho.sol";
+import {IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "./../../morpho/src/interfaces/IMorphoCallbacks.sol";
 import {RelendWTokenL1} from "./RelendWTokenL1.sol";
 import {PermissionedWrapper} from "./PermissionedWrapper.sol";
 import {FixedPriceOracle} from "./FixedPriceOracle.sol";
@@ -22,7 +23,7 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
     struct WTokenData {
         address asset;
         PermissionedWrapper wrapper;
-        IMorpho.MarketParams marketParams; 
+        MarketParams marketParams; 
     }
 
     mapping(address => WTokenData) public wTokenData;
@@ -41,20 +42,20 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
 
         PermissionedWrapper wrapper = new PermissionedWrapper(_wtoken);
 
-        IMorpho.MarketParams memory marketParams;
+        MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
         marketParams.collateralToken = address(wrapper);
         marketParams.oracle = address(new FixedPriceOracle(1.03e36, owner()));
         marketParams.irm = address(0);
         marketParams.lltv = 0.98e18;
 
-        bytes32 marketParamsId;
+        Id marketParamsId;
         assembly ("memory-safe") {
             // https://github.com/morpho-org/morpho-blue/blob/main/src/libraries/MarketParamsLib.sol#L17C1-L19C10
             marketParamsId := keccak256(marketParams, 156)
         }
 
-        IMorpho.Market memory m = MORPHO.market(marketParamsId);
+        Market memory m = MORPHO.market(marketParamsId);
         if(m.lastUpdate == 0) {
             MORPHO.createMarket(marketParams);
         }
@@ -88,8 +89,8 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
     function onMorphoSupplyCollateral(uint256 assets, bytes calldata data) external {
         require(msg.sender == address(MORPHO), "invalid msg.sender");
 
-        (PermissionedWrapper wrapper, IMorpho.MarketParams memory marketParams, RelendWTokenL1 wtoken)
-            = abi.decode(data, (PermissionedWrapper, IMorpho.MarketParams, RelendWTokenL1));
+        (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
+            = abi.decode(data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
 
         MORPHO.borrow(marketParams, assets, 0, address(this), address(this));
 
@@ -113,8 +114,8 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
     function onMorphoRepay(uint256 assets, bytes calldata data) external {
         require(msg.sender == address(MORPHO), "invalid msg.sender");
 
-        (PermissionedWrapper wrapper, IMorpho.MarketParams memory marketParams, RelendWTokenL1 wtoken)
-            = abi.decode(data, (PermissionedWrapper, IMorpho.MarketParams, RelendWTokenL1));
+        (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
+            = abi.decode(data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
 
         MORPHO.withdrawCollateral(marketParams, assets, address(this), address(this));
 

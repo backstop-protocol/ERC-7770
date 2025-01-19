@@ -23,7 +23,12 @@ interface IFuseLayer0Bridge {
         address zroPaymentAddress;
     }
 
-    function bridge(address token, uint amountLD, address to, CallParams calldata callParams, bytes memory adapterParams) external;
+    function bridge(address token, uint amountLD, address to, CallParams calldata callParams, bytes memory adapterParams) payable external;
+
+    function bridge(address localToken, uint16 remoteChainId, uint amount, address to, bool unwrapWeth, CallParams calldata callParams, bytes memory adapterParams) external payable;
+
+
+    function estimateBridgeFee(uint16 remoteChainId, bool useZro, bytes calldata adapterParams) external view returns (uint nativeFee, uint zroFee);
 }
 
 contract DeployBank is Script {
@@ -41,7 +46,7 @@ contract DeployBank is Script {
     address multisig2;// = vm.addr(pk2); //address(0x7Cc2f6C058A57EEc1e10Cffa092F38670D6ed8CC);
 
     address usdcWhale;// = vm.addr(pk3); // address(0x76A47FEBA4B7d209430eeFaFB6De8f76d6f67476);
-    address usdcFish;// = vm.addr(pk4); // address(0x122fb278CA2261631045e3bAfe42Cb74a733A8AF);
+    address payable usdcFish;// = vm.addr(pk4); // address(0x122fb278CA2261631045e3bAfe42Cb74a733A8AF);
 
     address deployer;// = vm.addr(pk5); // address(0xC0F86431dA3106945Fe318f4Da57E8362abE5862);
 
@@ -58,7 +63,7 @@ contract DeployBank is Script {
     multisig2 = vm.addr(multisig2pk); //address(0x7Cc2f6C058A57EEc1e10Cffa092F38670D6ed8CC);
 
     usdcWhale = vm.addr(usdcWhalepk); // address(0x76A47FEBA4B7d209430eeFaFB6De8f76d6f67476);
-    usdcFish = vm.addr(usdcFishpk); // address(0x122fb278CA2261631045e3bAfe42Cb74a733A8AF);
+    usdcFish = payable(vm.addr(usdcFishpk)); // address(0x122fb278CA2261631045e3bAfe42Cb74a733A8AF);
 
     deployer = vm.addr(deployerpk); // address(0xC0F86431dA3106945Fe318f4Da57E8362abE5862);
 
@@ -154,10 +159,12 @@ contract DeployBank is Script {
     function bridgeToFuseL0() internal {
         vm.startBroadcast(deployerpk);
 
-        usdc = new FakeUSDC(usdcWhale);
+        usdc = FakeUSDC(0x275bf5c13DE6a96aE1718bBb053AB1ADb006e867); //new FakeUSDC(usdcWhale);
 
-        wusdc = new RelendWTokenL1(address(usdc), "WFake USDC", "WUSDC");
-        wusdc.transferOwnership(multisig1);
+        wusdc = RelendWTokenL1(0x51fb5A7c9408A4e403c1cC04962A9CB6C78bF7eE); //new RelendWTokenL1(address(usdc), "WFake USDC", "WUSDC");
+        //wusdc.transferOwnership(multisig1);
+
+        console.log("the address %u", uint(uint160(address(usdc))));
 
         vm.stopBroadcast();
 
@@ -171,21 +178,58 @@ contract DeployBank is Script {
         usdc.approve(address(wusdc), 1e6);
         wusdc.depositFor(usdcFish, 1e6);
 
-        IFuseLayer0Bridge bridge = IFuseLayer0Bridge(0xe453d6649643F1F460C371dC3D1da98F7922fe51);
+        IFuseLayer0Bridge bridge = IFuseLayer0Bridge(0xc17265a4aBF3bf7c3c84a320b7e148FEd8a9D554);
         wusdc.approve(address(bridge), 1e6);
 
         IFuseLayer0Bridge.CallParams memory callParams;
         callParams.refundAddress = payable(usdcFish);
         callParams.zroPaymentAddress = address(0);
-        bridge.bridge(address(wusdc), 1e6, usdcFish, callParams, new bytes(0));
+
+        uint16 adapterType = 1;  // Type 1: set destination gas limit
+        uint256 gasLimit = 2000000;  // The gas limit on the destination chain
+
+        bytes memory adapterParams = abi.encodePacked(adapterType, gasLimit);
+
+        bridge.bridge{value : 0.001 ether}(address(wusdc), 1e6, usdcFish, callParams, adapterParams);
 
 
         vm.stopBroadcast();                
     }
 
+    function bridgeOutOfFuse() internal {
+
+        wusdc = RelendWTokenL1(0xaf6B5CBBae7a2274eaA05aC7f8295287a18DE7AA);
+
+        vm.startBroadcast(usdcFishpk);
+        console.log("balance %u", wusdc.balanceOf(usdcFish));
+
+        IFuseLayer0Bridge bridge = IFuseLayer0Bridge(0x68CEE4A72a5Db8c9949E548dae5C2Adf3F2dB6B1);
+        wusdc.approve(address(bridge), 1e5);
+
+        IFuseLayer0Bridge.CallParams memory callParams;
+        callParams.refundAddress = payable(usdcFish);
+        callParams.zroPaymentAddress = address(0);
+
+        uint16 adapterType = 1;  // Type 1: set destination gas limit
+        uint256 gasLimit = 2000000;  // The gas limit on the destination chain
+
+        bytes memory adapterParams = abi.encodePacked(adapterType, gasLimit);
+
+        console.log("XXXX %u", wusdc.balanceOf(usdcFish));
+
+
+        (uint nat, uint zro) = bridge.estimateBridgeFee(10102, true, adapterParams);
+        console.log("%u %u", nat, zro);
+        bridge.bridge{value : nat + 4 ether}(address(wusdc), 10102, 1e5, usdcFish, false, callParams, adapterParams);
+
+
+        vm.stopBroadcast();
+    }
+
 
     function run() public {
-        bridgeToFuseL0();
+        //bridgeToFuseL0();
+        bridgeOutOfFuse();
 
         /*
         init();

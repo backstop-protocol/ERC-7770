@@ -6,6 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {RelendWTokenL1} from "./../../src/L1/RelendWTokenL1.sol";
 import {MorphoBank} from "./../../src/L1/MorphoBank.sol";
 import {IMorpho, MarketParams, Market, Id} from "./../../morpho/src/interfaces/IMorpho.sol";
+//import {Morpho} from "./../../morpho/src/Morpho.sol";
 
 interface IStarknetBridgeManager {
     function enrollTokenBridge(address token) external payable;
@@ -50,9 +51,13 @@ contract BankTest is Test {
 
     address deployer = address(0xC0F86431dA3106945Fe318f4Da57E8362abE5862);
 
-    IMorpho constant MORPHO = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+    IMorpho public morpho;
 
     function setUp() public {
+        // deploying with deployCode because compiler versions are conflicting
+        morpho = IMorpho(deployCode("Morpho.sol", abi.encode(address(this))));
+        morpho.enableIrm(address(0));
+        morpho.enableLltv(0.98e18);
 
         vm.deal(multisig1, 100 ether);
         vm.deal(multisig2, 100 ether);        
@@ -66,7 +71,7 @@ contract BankTest is Test {
 
         wusdc = new RelendWTokenL1(address(usdc), "WFake USDC", "WUSDC", multisig2);
 
-        bank = new MorphoBank(MORPHO, multisig2);
+        bank = new MorphoBank(morpho, multisig2);
 
         vm.stopPrank();
 
@@ -80,9 +85,9 @@ contract BankTest is Test {
 
         // give from whale to morpho and seed the dummy market
         vm.startPrank(usdcWhale);
-        usdc.approve(address(MORPHO), type(uint256).max);
+        usdc.approve(address(morpho), type(uint256).max);
         (,,MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
-        MORPHO.supply(marketParams, 1e12, 0, usdcWhale, new bytes(0));
+        morpho.supply(marketParams, 1e12, 0, usdcWhale, new bytes(0));
         vm.stopPrank();
 
         // give some usdc to small fish
