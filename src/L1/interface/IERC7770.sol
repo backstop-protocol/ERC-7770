@@ -12,7 +12,7 @@ interface IERC7770 {
     function fractionalReserveMint(address _to, uint256 _amount) external;
     function fractionalReserveBurn(address _from, uint256 _amount) external;
  
-   // getters
+    // getters
     function totalBorrowedSupply() external view returns (uint256);
     function requiredReserveRatio() external view returns (uint256);
     function segregatedAccount(address _account) external view returns (bool);

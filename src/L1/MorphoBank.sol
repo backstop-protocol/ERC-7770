@@ -30,13 +30,18 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
 
     IMorpho immutable public MORPHO;
 
+    event WTokenListed(address _Wtoken, Id _morphoMarketId);
+
+    event LiquidityTopUp(address _wtoken, uint _amount);
+    event LiquidityTopDown(address _wtoken, uint _amount);
+
     constructor(IMorpho _morphoBlue, address _admin) AccessControlDefaultAdminRules(0 days, _admin) {
         MORPHO = _morphoBlue;
     }
 
     // if wtoken is already listed then it is ok to override it
-    function listWToken(address _wtoken) onlyRole(LISTER_ROLE) public {
-        require(wTokenData[_wtoken].asset == address(0), "wtoken is already listed");
+    function listWToken(address _wtoken) onlyRole(LISTER_ROLE) external {
+        require(wTokenData[_wtoken].asset == address(0), "listWToken: wtoken is already listed");
 
         IERC20 underlyingAsset = RelendWTokenL1(_wtoken).underlying();
 
@@ -70,56 +75,56 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
 
         wTokenData[_wtoken] = WTokenData(address(underlyingAsset), wrapper, marketParams);
 
-        // TODO - emit event
+        emit WTokenListed(_wtoken, marketParamsId);
     }
 
     // topup liquidity
-    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) public {
+    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
-        require(data.asset != address(0), "invalid wtoken");
+        require(data.asset != address(0), "topUpLiquidity: invalid wtoken");
 
         bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
 
         MORPHO.supplyCollateral(wTokenData[_wtoken].marketParams, _amount, address(this), encodedData);
 
-        // TODO - emit event        
+        emit LiquidityTopUp(_wtoken, _amount);
     }
 
-    function onMorphoSupplyCollateral(uint256 assets, bytes calldata data) external {
-        require(msg.sender == address(MORPHO), "invalid msg.sender");
+    function onMorphoSupplyCollateral(uint256 _assets, bytes calldata _data) external {
+        require(msg.sender == address(MORPHO), "onMorphoSupplyCollateral: invalid msg.sender");
 
         (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
-            = abi.decode(data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
+            = abi.decode(_data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
 
-        MORPHO.borrow(marketParams, assets, 0, address(this), address(this));
+        MORPHO.borrow(marketParams, _assets, 0, address(this), address(this));
 
-        wtoken.depositFor(address(this), assets);
-        wrapper.depositFor(address(this), assets);
+        wtoken.depositFor(address(this), _assets);
+        wrapper.depositFor(address(this), _assets);
     }
 
     // topdown liquidity
-    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) public {
+    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
-        require(data.asset != address(0), "invalid wtoken");
+        require(data.asset != address(0), "topDownLiquidity: invalid wtoken");
 
         bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
 
         MORPHO.repay(wTokenData[_wtoken].marketParams, _amount, 0, address(this), encodedData);
 
-        // TODO - emit event        
+        emit LiquidityTopDown(_wtoken, _amount);
     }
 
-    function onMorphoRepay(uint256 assets, bytes calldata data) external {
-        require(msg.sender == address(MORPHO), "invalid msg.sender");
+    function onMorphoRepay(uint256 _assets, bytes calldata _data) external {
+        require(msg.sender == address(MORPHO), "onMorphoRepay: invalid msg.sender");
 
         (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
-            = abi.decode(data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
+            = abi.decode(_data, (PermissionedWrapper, MarketParams, RelendWTokenL1));
 
-        MORPHO.withdrawCollateral(marketParams, assets, address(this), address(this));
+        MORPHO.withdrawCollateral(marketParams, _assets, address(this), address(this));
 
-        wrapper.withdrawTo(address(this), assets);
-        wtoken.withdrawTo(address(this), assets);        
+        wrapper.withdrawTo(address(this), _assets);
+        wtoken.withdrawTo(address(this), _assets);        
     }
 } 
