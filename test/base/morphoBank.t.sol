@@ -73,15 +73,15 @@ contract BankTest is Test {
         // list the new token
         vm.startPrank(multisig2);
         bank.grantRole(bank.LISTER_ROLE(), multisig2);
-        bank.grantRole(bank.TOPUP_ROLE(), multisig2);    
-        bank.listWToken(address(wusdc));
+        bank.grantRole(bank.LIQUIDITY_ROLE(), multisig2);    
+        bank.listWToken(address(wusdc), multisig2);
         wusdc.grantRole(wusdc.CURATOR_ROLE(), multisig1);        
         vm.stopPrank();
 
         // give from whale to morpho and seed the dummy market
         vm.startPrank(usdcWhale);
         usdc.approve(address(MORPHO), type(uint256).max);
-        (,,MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
+        (,MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
         MORPHO.supply(marketParams, 1e12, 0, usdcWhale, new bytes(0));
         vm.stopPrank();
 
