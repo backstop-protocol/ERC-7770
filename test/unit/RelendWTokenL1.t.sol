@@ -296,5 +296,10 @@ contract RelendWTokenL1Test is Test {
         assertEq(wusdc.balanceOf(randomUser2), 4e4);        
         vm.stopPrank();        
     }
-}
 
+    function testUselessFunctions() view public {
+        assertEq(wusdc.segregatedAccount(randomUser2), false);
+        assertEq(wusdc.totalSegregatedSupply(), 0);
+        assertEq(wusdc.requiredReserveRatio(), 2 ** 256 - 1);
+    }
+}

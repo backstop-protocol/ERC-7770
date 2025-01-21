@@ -37,6 +37,11 @@ contract PermissionedWrapperTest is Test {
         pwusdc.transferOwnership(wrappedOwner);
     }
 
+    function testConstructor() public {
+        PermissionedWrapper pwusdc2 = new PermissionedWrapper(address(usdc));
+        assertEq(pwusdc2.name(), "Permissioned Wrapped Fake USDC");
+        assertEq(pwusdc2.symbol(), "PWFUSDC");
+    }
     function testNameAndSymbol() view public {
         assertEq(pwusdc.name(), "Permissioned Wrapped Fake USDC");
         assertEq(pwusdc.symbol(), "PWFUSDC");

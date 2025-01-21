@@ -312,6 +312,18 @@ contract BankTest is Test {
         vm.stopPrank();        
     }
 
+    function testTopupNonExistingToken() public {
+        vm.startPrank(liquidityCurator);
+
+        vm.expectRevert("topUpLiquidity: invalid wtoken");
+        bank.topUpLiquidity(address(123456789), 1);
+
+        vm.expectRevert("topDownLiquidity: invalid wtoken");
+        bank.topDownLiquidity(address(123456789), 1);
+
+        vm.stopPrank();
+    }
+
     function testMorphoCallbackFromInvalidSender() public {
         vm.startPrank(randomUser);
 
@@ -322,6 +334,11 @@ contract BankTest is Test {
         bank.onMorphoSupplyCollateral(0, new bytes(0));
 
         vm.stopPrank();
+    }
+
+    function testCtor() public {
+        MorphoBank newBank = new MorphoBank(IMorpho(address(666)), address(999));
+        assertEq(address(newBank.MORPHO()), address(666));
     }
 
     function deployWrappedUSDC(address usdcAddress, string memory name, string memory symbol, address minter, address burner) internal returns(RelendWTokenL1) {
