@@ -7,7 +7,7 @@ import {RelendWTokenL1} from "./../../src/L1/RelendWTokenL1.sol";
 import {MorphoBank} from "./../../src/L1/MorphoBank.sol";
 import {PermissionedWrapper} from "./../../src/L1/PermissionedWrapper.sol";
 import {FixedPriceOracle} from "./../../src/L1/FixedPriceOracle.sol";
-import {IMorpho, MarketParams, Market, Id} from "./../../morpho/src/interfaces/IMorpho.sol";
+import {IMorpho, MarketParams, Market, Id, Position} from "./../../morpho/src/interfaces/IMorpho.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract FakeUSDC is ERC20 {
@@ -72,7 +72,7 @@ contract BankTest is Test {
         // list the roles of the bank
         vm.startPrank(bankOwner);
         bank.grantRole(bank.LISTER_ROLE(), lister);
-        bank.grantRole(bank.LIQUIDITY_ROLE(), bankOwner);
+        bank.grantRole(bank.LIQUIDITY_ROLE(), liquidityCurator);
         vm.stopPrank();
     }
 /*
@@ -204,6 +204,75 @@ contract BankTest is Test {
         );
         bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();        
+    }
+
+    event LiquidityTopUp(address _wtoken, uint _amount);
+    event LiquidityTopDown(address _wtoken, uint _amount);
+    function testTopup() public {
+        address minter = address(0x666);
+        address burner = address(0x777);
+        address oracleOwner = address(0x888);        
+        RelendWTokenL1 wusdc = deployWrappedUSDC(address(usdc), "W Fake USDC", "WF", minter, burner);
+
+        vm.startPrank(lister);
+        Id marketId = bank.listWToken(address(wusdc), oracleOwner);
+        vm.stopPrank();
+
+        (PermissionedWrapper wrapper,) = bank.wTokenData(address(wusdc));
+
+        seedMorphoLiquidity(address(wusdc), 100e6);
+
+        vm.startPrank(minter);
+        wusdc.fractionalReserveMint(minter, 50e6);
+        vm.stopPrank();
+
+        vm.startPrank(liquidityCurator);
+        vm.expectEmit(address(bank));
+        emit LiquidityTopUp(address(wusdc), 50e6);
+        bank.topUpLiquidity(address(wusdc), 50e6);
+        vm.stopPrank();
+
+        assertEq(wrapper.totalSupply(), 50e6);
+
+        // move fwd in time 1 day
+        vm.warp(block.timestamp + 24 * 60 * 60);
+
+        assertEq(usdc.balanceOf(randomUser), 0);
+        vm.startPrank(minter);
+        wusdc.withdrawTo(randomUser, 50e6);
+        vm.stopPrank();
+
+        assertEq(usdc.balanceOf(randomUser), 50e6);
+
+        Market memory market = morpho.market(marketId);
+        assertEq(market.totalBorrowAssets, 50e6);
+
+        Position memory position = morpho.position(marketId, address(bank));
+        assertEq(position.collateral, 50e6);
+        assertEq(position.supplyShares, 0);
+        assertEq(position.borrowShares, market.totalBorrowShares);
+
+        // add liquidity to wusdc and top down
+        vm.startPrank(usdcWhale);
+        usdc.approve(address(wusdc), 50e6);
+        wusdc.depositFor(usdcWhale, 50e6);
+        vm.stopPrank();
+
+        vm.startPrank(liquidityCurator);
+        vm.expectEmit(address(bank));
+        emit LiquidityTopDown(address(wusdc), 50e6);        
+        bank.topDownLiquidity(address(wusdc), 50e6);
+        vm.stopPrank();
+
+        market = morpho.market(marketId);
+        assertEq(market.totalBorrowAssets, 0);
+
+        position = morpho.position(marketId, address(bank));
+        assertEq(position.collateral, 0);
+        assertEq(position.supplyShares, 0);
+        assertEq(position.borrowShares, 0);
+
+        assertEq(wrapper.totalSupply(), 0);             
     }
 
     function deployWrappedUSDC(address usdcAddress, string memory name, string memory symbol, address minter, address burner) internal returns(RelendWTokenL1) {
