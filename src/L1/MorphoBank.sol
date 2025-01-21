@@ -106,7 +106,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
 
     // topdown liquidity
     function topDownLiquidity(address _wtoken, uint _amount) onlyRole(LIQUIDITY_ROLE) external {
-        // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
+        // withdraw the collateral, unwrap twice, and repay the morpho debt.
         WTokenData storage data = wTokenData[_wtoken];
         require(data.wrapper != PermissionedWrapper(address(0)), "topDownLiquidity: invalid wtoken");
 
