@@ -275,6 +275,55 @@ contract BankTest is Test {
         assertEq(wrapper.totalSupply(), 0);             
     }
 
+    function testTopupDownRoles() public {
+        vm.startPrank(randomUser);
+        bytes32 DEFAULT_ADMIN_ROLE = bank.DEFAULT_ADMIN_ROLE();
+        bytes32 LIQUIDITY_ROLE = bank.LIQUIDITY_ROLE();
+
+        // 1) try to set liquidity from non admin
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                randomUser,
+                DEFAULT_ADMIN_ROLE
+            )
+        );
+        bank.grantRole(LIQUIDITY_ROLE, bankOwner);
+
+        // 2) try to popup from non liquidity role
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                randomUser,
+                LIQUIDITY_ROLE
+            )
+        );        
+        bank.topUpLiquidity(address(0), 7);
+
+        // 3) try to topdown form non liquidity curator
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                randomUser,
+                LIQUIDITY_ROLE
+            )
+        );        
+        bank.topDownLiquidity(address(0), 7);
+        vm.stopPrank();        
+    }
+
+    function testMorphoCallbackFromInvalidSender() public {
+        vm.startPrank(randomUser);
+
+        vm.expectRevert("onMorphoRepay: invalid msg.sender");
+        bank.onMorphoRepay(0, new bytes(0));
+
+        vm.expectRevert("onMorphoSupplyCollateral: invalid msg.sender");
+        bank.onMorphoSupplyCollateral(0, new bytes(0));
+
+        vm.stopPrank();
+    }
+
     function deployWrappedUSDC(address usdcAddress, string memory name, string memory symbol, address minter, address burner) internal returns(RelendWTokenL1) {
         RelendWTokenL1 newWUSDC = new RelendWTokenL1(usdcAddress, name, symbol, address(this));
         newWUSDC.grantRole(newWUSDC.CURATOR_ROLE(), minter);
