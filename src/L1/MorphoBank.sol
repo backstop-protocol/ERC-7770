@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,14 +14,13 @@ import {PermissionedWrapper} from "./PermissionedWrapper.sol";
 import {FixedPriceOracle} from "./FixedPriceOracle.sol";
 
 
-contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
+contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
     using SafeERC20 for IERC20;
 
     bytes32 public constant LISTER_ROLE = keccak256("LISTER_ROLE");
-    bytes32 public constant TOPUP_ROLE = keccak256("TOPUP_ROLE");    
+    bytes32 public constant LIQUIDITY_ROLE = keccak256("LIQUIDITY_ROLE");    
 
     struct WTokenData {
-        address asset;
         PermissionedWrapper wrapper;
         MarketParams marketParams; 
     }
@@ -35,13 +34,14 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
     event LiquidityTopUp(address _wtoken, uint _amount);
     event LiquidityTopDown(address _wtoken, uint _amount);
 
-    constructor(IMorpho _morphoBlue, address _admin) AccessControlDefaultAdminRules(0 days, _admin) {
+    constructor(IMorpho _morphoBlue, address _admin) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         MORPHO = _morphoBlue;
     }
 
     // if wtoken is already listed then it is ok to override it
-    function listWToken(address _wtoken) onlyRole(LISTER_ROLE) external {
-        require(wTokenData[_wtoken].asset == address(0), "listWToken: wtoken is already listed");
+    function listWToken(address _wtoken, address _oracleOwner) onlyRole(LISTER_ROLE) external returns(Id) {
+        require(wTokenData[_wtoken].wrapper == PermissionedWrapper(address(0)), "listWToken: wtoken is already listed");
 
         IERC20 underlyingAsset = RelendWTokenL1(_wtoken).underlying();
 
@@ -50,14 +50,14 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
         MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
         marketParams.collateralToken = address(wrapper);
-        marketParams.oracle = address(new FixedPriceOracle(1.03e36, owner()));
+        marketParams.oracle = address(new FixedPriceOracle(1.03e36, _oracleOwner));
         marketParams.irm = address(0);
         marketParams.lltv = 0.98e18;
 
         Id marketParamsId;
         assembly ("memory-safe") {
             // https://github.com/morpho-org/morpho-blue/blob/main/src/libraries/MarketParamsLib.sol#L17C1-L19C10
-            marketParamsId := keccak256(marketParams, 156)
+            marketParamsId := keccak256(marketParams, 160)
         }
 
         Market memory m = MORPHO.market(marketParamsId);
@@ -65,7 +65,6 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
             MORPHO.createMarket(marketParams);
         }
 
-        IERC20(underlyingAsset).approve(address(wrapper), type(uint256).max);
         IERC20(underlyingAsset).approve(address(MORPHO), type(uint256).max);
         IERC20(underlyingAsset).approve(address(_wtoken), type(uint256).max);
 
@@ -73,16 +72,18 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
 
         wrapper.approve(address(MORPHO), type(uint256).max);
 
-        wTokenData[_wtoken] = WTokenData(address(underlyingAsset), wrapper, marketParams);
+        wTokenData[_wtoken] = WTokenData(wrapper, marketParams);
 
         emit WTokenListed(_wtoken, marketParamsId);
+
+        return marketParamsId;
     }
 
     // topup liquidity
-    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) external {
+    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(LIQUIDITY_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
-        require(data.asset != address(0), "topUpLiquidity: invalid wtoken");
+        require(data.wrapper != PermissionedWrapper(address(0)), "topUpLiquidity: invalid wtoken");
 
         bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
 
@@ -104,10 +105,10 @@ contract MorphoBank is AccessControlDefaultAdminRules, IMorphoSupplyCollateralCa
     }
 
     // topdown liquidity
-    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(TOPUP_ROLE) external {
+    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(LIQUIDITY_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
-        require(data.asset != address(0), "topDownLiquidity: invalid wtoken");
+        require(data.wrapper != PermissionedWrapper(address(0)), "topDownLiquidity: invalid wtoken");
 
         bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
 
