@@ -31,8 +31,8 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
 
     event WTokenListed(address _Wtoken, Id _morphoMarketId);
 
-    event LiquidityTopUp(address _wtoken, uint _amount);
-    event LiquidityTopDown(address _wtoken, uint _amount);
+    event LiquidityTopUp(address _wtoken, uint256 _amount);
+    event LiquidityTopDown(address _wtoken, uint256 _amount);
 
     constructor(IMorpho _morphoBlue, address _admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -79,7 +79,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
     }
 
     // topup liquidity
-    function topUpLiquidity(address _wtoken, uint _amount) onlyRole(LIQUIDITY_ROLE) external {
+    function topUpLiquidity(address _wtoken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
         WTokenData storage data = wTokenData[_wtoken];
         require(data.wrapper != PermissionedWrapper(address(0)), "topUpLiquidity: invalid wtoken");
@@ -105,7 +105,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
     }
 
     // topdown liquidity
-    function topDownLiquidity(address _wtoken, uint _amount) onlyRole(LIQUIDITY_ROLE) external {
+    function topDownLiquidity(address _wtoken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
         // withdraw the collateral, unwrap twice, and repay the morpho debt.
         WTokenData storage data = wTokenData[_wtoken];
         require(data.wrapper != PermissionedWrapper(address(0)), "topDownLiquidity: invalid wtoken");
