@@ -7,7 +7,7 @@ import {RelendWTokenL1} from "./../../src/L1/RelendWTokenL1.sol";
 import {MorphoBank} from "./../../src/L1/MorphoBank.sol";
 import {PermissionedWrapper} from "./../../src/L1/PermissionedWrapper.sol";
 import {FixedPriceOracle} from "./../../src/L1/FixedPriceOracle.sol";
-import {IMorpho, MarketParams, Market, Id, Position} from "./../../lib/morpho/src/interfaces/IMorpho.sol";
+import {IMorpho, MarketParams, Market, Id, Position} from "@morpho/interfaces/IMorpho.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract FakeUSDC is ERC20 {
