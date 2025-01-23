@@ -83,7 +83,7 @@ contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, AccessControl {
         return ERC20Wrapper.decimals();
     }
 
-    // the below functions are for competability to the ERC7770 standard.
+    // the below functions are for compatibility to the ERC7770 standard.
     function requiredReserveRatio() external pure returns (uint256) {
         return type(uint256).max;
     }
