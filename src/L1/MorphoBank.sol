@@ -92,6 +92,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
     }
 
     function onMorphoSupplyCollateral(uint256 _assets, bytes calldata _data) external {
+        // if morpho is the caller, it must be the case that the caller of morpho.supplyCollateral is this contract
         require(msg.sender == address(MORPHO), "onMorphoSupplyCollateral: invalid msg.sender");
 
         (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
@@ -117,6 +118,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
     }
 
     function onMorphoRepay(uint256 _assets, bytes calldata _data) external {
+        // if morpho is the caller, it must be the case that the caller of morpho.repay is this contract        
         require(msg.sender == address(MORPHO), "onMorphoRepay: invalid msg.sender");
 
         (PermissionedWrapper wrapper, MarketParams memory marketParams, RelendWTokenL1 wtoken)
