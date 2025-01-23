@@ -81,7 +81,7 @@ contract BankTest is Test {
         // give from whale to morpho and seed the dummy market
         vm.startPrank(usdcWhale);
         usdc.approve(address(MORPHO), type(uint256).max);
-        (,MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
+        MarketParams memory marketParams = bank.wTokenMarketParams(address(wusdc));
         MORPHO.supply(marketParams, 1e12, 0, usdcWhale, new bytes(0));
         vm.stopPrank();
 
