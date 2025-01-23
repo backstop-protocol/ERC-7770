@@ -12,7 +12,7 @@ import {IERC7770} from "./interface/IERC7770.sol";
 contract Dummy {
     using Address for address;
 
-    function doArbitrayCall(address target, bytes calldata data) payable external {
+    function doArbitraryCall(address target, bytes calldata data) payable external {
         target.functionCallWithValue(data, msg.value);
     }
 }
@@ -62,14 +62,14 @@ contract RelendWTokenL1 is IERC7770, ERC20Wrapper, ERC20Permit, AccessControl {
 
     function depositForAndCall(address _account, uint256 _value, address _callTarget, bytes calldata _callData) external payable returns (bool) {
         require(ERC20Wrapper.depositFor(_account, _value), "depositForAndCall: depositFor failed");
-        dummy.doArbitrayCall{value: msg.value}(_callTarget, _callData);
+        dummy.doArbitraryCall{value: msg.value}(_callTarget, _callData);
 
         return true;
     }
 
     function withdrawToAndCall(address _account, uint256 _value, address _callTarget, bytes calldata _callData) external payable returns (bool) {
         require(ERC20Wrapper.withdrawTo(_account, _value), "withdrawToAndCall: withdawTo failed");
-        dummy.doArbitrayCall{value: msg.value}(_callTarget, _callData);
+        dummy.doArbitraryCall{value: msg.value}(_callTarget, _callData);
 
         return true;
     }
