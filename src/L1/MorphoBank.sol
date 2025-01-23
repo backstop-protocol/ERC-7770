@@ -5,8 +5,8 @@ import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IMorpho, MarketParams, Market, Id} from "./../../morpho/src/interfaces/IMorpho.sol";
-import {IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "./../../morpho/src/interfaces/IMorphoCallbacks.sol";
+import {IMorpho, MarketParams, Market, Id} from "./../../lib/morpho/src/interfaces/IMorpho.sol";
+import {IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "./../../lib/morpho/src/interfaces/IMorphoCallbacks.sol";
 import {RelendWTokenL1} from "./RelendWTokenL1.sol";
 import {PermissionedWrapper} from "./PermissionedWrapper.sol";
 import {FixedPriceOracle} from "./FixedPriceOracle.sol";

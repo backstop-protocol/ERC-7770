@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.19;
 
-import {Morpho} from "./../morpho/src/Morpho.sol";
+import {Morpho} from "./../lib/morpho/src/Morpho.sol";
 
 
 contract FakeMorpho is Morpho {
