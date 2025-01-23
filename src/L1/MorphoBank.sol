@@ -29,22 +29,22 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
 
     IMorpho immutable public MORPHO;
 
-    event WTokenListed(address _Wtoken, Id _morphoMarketId);
+    event WTokenListed(address _wToken, Id _morphoMarketId);
 
-    event LiquidityTopUp(address _wtoken, uint256 _amount);
-    event LiquidityTopDown(address _wtoken, uint256 _amount);
+    event LiquidityTopUp(address _wToken, uint256 _amount);
+    event LiquidityTopDown(address _wToken, uint256 _amount);
 
     constructor(IMorpho _morphoBlue, address _admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         MORPHO = _morphoBlue;
     }
 
-    function listWToken(address _wtoken, address _oracleOwner) onlyRole(LISTER_ROLE) external returns(Id) {
-        require(wTokenData[_wtoken].wrapper == PermissionedWrapper(address(0)), "listWToken: wtoken is already listed");
+    function listWToken(address _wToken, address _oracleOwner) onlyRole(LISTER_ROLE) external returns(Id) {
+        require(wTokenData[_wToken].wrapper == PermissionedWrapper(address(0)), "listWToken: wtoken is already listed");
 
-        IERC20 underlyingAsset = RelendWTokenL1(_wtoken).underlying();
+        IERC20 underlyingAsset = RelendWTokenL1(_wToken).underlying();
 
-        PermissionedWrapper wrapper = new PermissionedWrapper(_wtoken);
+        PermissionedWrapper wrapper = new PermissionedWrapper(_wToken);
 
         MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
@@ -65,30 +65,30 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
         }
 
         IERC20(underlyingAsset).approve(address(MORPHO), type(uint256).max);
-        IERC20(underlyingAsset).approve(address(_wtoken), type(uint256).max);
+        IERC20(underlyingAsset).approve(address(_wToken), type(uint256).max);
 
-        IERC20(_wtoken).approve(address(wrapper), type(uint256).max);
+        IERC20(_wToken).approve(address(wrapper), type(uint256).max);
 
         wrapper.approve(address(MORPHO), type(uint256).max);
 
-        wTokenData[_wtoken] = WTokenData(wrapper, marketParams);
+        wTokenData[_wToken] = WTokenData(wrapper, marketParams);
 
-        emit WTokenListed(_wtoken, marketParamsId);
+        emit WTokenListed(_wToken, marketParamsId);
 
         return marketParamsId;
     }
 
     // topup liquidity
-    function topUpLiquidity(address _wtoken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
+    function topUpLiquidity(address _wToken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
         // borrow from morpho, wrap the asset twice, and put is as a collateral on morpho
-        WTokenData storage data = wTokenData[_wtoken];
+        WTokenData storage data = wTokenData[_wToken];
         require(data.wrapper != PermissionedWrapper(address(0)), "topUpLiquidity: invalid wtoken");
 
-        bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
+        bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wToken);
 
-        MORPHO.supplyCollateral(wTokenData[_wtoken].marketParams, _amount, address(this), encodedData);
+        MORPHO.supplyCollateral(wTokenData[_wToken].marketParams, _amount, address(this), encodedData);
 
-        emit LiquidityTopUp(_wtoken, _amount);
+        emit LiquidityTopUp(_wToken, _amount);
     }
 
     function onMorphoSupplyCollateral(uint256 _assets, bytes calldata _data) external {
@@ -105,16 +105,16 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
     }
 
     // topdown liquidity
-    function topDownLiquidity(address _wtoken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
+    function topDownLiquidity(address _wToken, uint256 _amount) onlyRole(LIQUIDITY_ROLE) external {
         // withdraw the collateral, unwrap twice, and repay the morpho debt.
-        WTokenData storage data = wTokenData[_wtoken];
+        WTokenData storage data = wTokenData[_wToken];
         require(data.wrapper != PermissionedWrapper(address(0)), "topDownLiquidity: invalid wtoken");
 
-        bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wtoken);
+        bytes memory encodedData = abi.encode(data.wrapper, data.marketParams, _wToken);
 
-        MORPHO.repay(wTokenData[_wtoken].marketParams, _amount, 0, address(this), encodedData);
+        MORPHO.repay(wTokenData[_wToken].marketParams, _amount, 0, address(this), encodedData);
 
-        emit LiquidityTopDown(_wtoken, _amount);
+        emit LiquidityTopDown(_wToken, _amount);
     }
 
     function onMorphoRepay(uint256 _assets, bytes calldata _data) external {
