@@ -115,7 +115,8 @@ contract BankTest is Test {
         Id marketId = bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();
 
-        (PermissionedWrapper wrapper, MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
+        MarketParams memory marketParams = getMarketParams(bank, address(wusdc));
+        PermissionedWrapper wrapper = PermissionedWrapper(marketParams.collateralToken);
 
         assertEq(wrapper.name(), "Permissioned Wrapped W Fake USDC");
         assertEq(wrapper.symbol(), "PWWF");
@@ -148,7 +149,8 @@ contract BankTest is Test {
         vm.startPrank(lister);
         bank.listWToken(address(wusdc), oracleOwner);
 
-        (PermissionedWrapper wrapper, MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
+        MarketParams memory marketParams = getMarketParams(bank, address(wusdc));
+        PermissionedWrapper wrapper = PermissionedWrapper(marketParams.collateralToken);
         assertEq(address(wrapper), expectedFirstDeployedWrapperAddress);
         assertEq(marketParams.oracle, expectedFirstDeployedFixedPriceOracleAddress);
 
@@ -177,7 +179,8 @@ contract BankTest is Test {
         bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();        
 
-        (PermissionedWrapper newWrapper, MarketParams memory newMarketParams) = bank.wTokenData(address(wusdc));
+        MarketParams memory newMarketParams = getMarketParams(bank, address(wusdc));
+        PermissionedWrapper newWrapper = PermissionedWrapper(newMarketParams.collateralToken);
 
         assertEq(address(newWrapper), expectedFirstDeployedWrapperAddress);
         assertEq(newMarketParams.collateralToken, marketParams.collateralToken);
@@ -218,7 +221,7 @@ contract BankTest is Test {
         Id marketId = bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();
 
-        (PermissionedWrapper wrapper,) = bank.wTokenData(address(wusdc));
+        PermissionedWrapper wrapper = PermissionedWrapper(getMarketParams(bank, address(wusdc)).collateralToken);
 
         seedMorphoLiquidity(address(wusdc), 100e6);
 
@@ -356,8 +359,12 @@ contract BankTest is Test {
     function seedMorphoLiquidity(address wusdc, uint usdcAmount) internal {
         vm.startPrank(usdcWhale);
         usdc.approve(address(morpho), type(uint256).max);
-        (,MarketParams memory marketParams) = bank.wTokenData(address(wusdc));
+        MarketParams memory marketParams = getMarketParams(bank, address(wusdc));
         morpho.supply(marketParams, usdcAmount, 0, usdcWhale, new bytes(0));
         vm.stopPrank();
+    }
+
+    function getMarketParams(MorphoBank b, address w) internal view returns(MarketParams memory params) {
+        (params.loanToken, params.collateralToken, params.oracle, params.irm, params.lltv) = b.wTokenMarketParams(w);
     }
 }
