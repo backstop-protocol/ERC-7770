@@ -39,7 +39,6 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
         MORPHO = _morphoBlue;
     }
 
-    // if wtoken is already listed then it is ok to override it
     function listWToken(address _wtoken, address _oracleOwner) onlyRole(LISTER_ROLE) external returns(Id) {
         require(wTokenData[_wtoken].wrapper == PermissionedWrapper(address(0)), "listWToken: wtoken is already listed");
 
