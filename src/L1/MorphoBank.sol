@@ -40,7 +40,8 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
         MarketParams memory marketParams;
         marketParams.loanToken = address(underlyingAsset);        
         marketParams.collateralToken = address(wrapper);
-        marketParams.oracle = address(new FixedPriceOracle(1.03e36, _oracleOwner));
+        // oracle price is set to 1 / 0.98 + (1 / 1000)
+        marketParams.oracle = address(new FixedPriceOracle(uint256(1e36 * 100) / uint256(98) + uint256(1e33), _oracleOwner));
         marketParams.irm = address(0);
         marketParams.lltv = 0.98e18;
 
