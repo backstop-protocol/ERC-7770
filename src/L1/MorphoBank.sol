@@ -20,10 +20,10 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
 
     IMorpho immutable public MORPHO;
 
-    event WTokenListed(address _wToken, Id _morphoMarketId);
+    event WTokenListed(address indexed _wToken, Id _morphoMarketId);
 
-    event LiquidityTopUp(address _wToken, uint256 _amount);
-    event LiquidityTopDown(address _wToken, uint256 _amount);
+    event LiquidityTopUp(address indexed _wToken, uint256 _amount);
+    event LiquidityTopDown(address indexed _wToken, uint256 _amount);
 
     constructor(IMorpho _morphoBlue, address _admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);

@@ -75,35 +75,8 @@ contract BankTest is Test {
         bank.grantRole(bank.LIQUIDITY_ROLE(), liquidityCurator);
         vm.stopPrank();
     }
-/*
 
-    function testTopupLiquidity() public {
-        vm.startPrank(multisig2);
-
-        // start with 0 balance
-        assertEq(usdc.balanceOf(address(wusdc)), 0);
-
-        // do topup
-        bank.topUpLiquidity(address(wusdc), 2e10);
-
-        assertEq(usdc.balanceOf(address(wusdc)), 2e10);
-
-        // do topdown
-        bank.topDownLiquidity(address(wusdc), 1e10);        
-        assertEq(usdc.balanceOf(address(wusdc)), 1e10);
-
-        vm.stopPrank();
-
-        vm.startPrank(multisig1);
-
-        assertEq(usdc.balanceOf(address(multisig1)), 0);
-        wusdc.fractionalReserveMint(address(multisig1), 12e6);
-        wusdc.withdrawTo(address(multisig1), 12e6);
-        assertEq(usdc.balanceOf(address(multisig1)), 12e6);        
-
-        vm.stopPrank();
-    }
-*/
+    event WTokenListed(address indexed _wToken, Id _morphoMarketId);
     function testBasicListing() public {
         address minter = address(0x666);
         address burner = address(0x777);
@@ -112,6 +85,8 @@ contract BankTest is Test {
         RelendWTokenL1 wusdc = deployWrappedUSDC(address(usdc), "W Fake USDC", "WF", minter, burner);
 
         vm.startPrank(lister);
+        vm.expectEmit(address(bank));
+        emit WTokenListed(address(wusdc), Id.wrap(0x00e1f0349265946cfd442afa16b44dde8d17316ca67aabf302b64835d78d4759));
         Id marketId = bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();
 
@@ -209,8 +184,8 @@ contract BankTest is Test {
         vm.stopPrank();        
     }
 
-    event LiquidityTopUp(address _wtoken, uint _amount);
-    event LiquidityTopDown(address _wtoken, uint _amount);
+    event LiquidityTopUp(address indexed _wtoken, uint _amount);
+    event LiquidityTopDown(address indexed _wtoken, uint _amount);
     function testTopup() public {
         address minter = address(0x666);
         address burner = address(0x777);
