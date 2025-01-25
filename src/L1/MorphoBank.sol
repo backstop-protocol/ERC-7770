@@ -47,7 +47,7 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
 
         Id marketParamsId;
         assembly ("memory-safe") {
-            // https://github.com/morpho-org/morpho-blue/blob/main/src/libraries/MarketParamsLib.sol#L17C1-L19C10
+            // https://github.com/morpho-org/morpho-blue/blob/8a5db8a1a4f475531b32e8f538816851475791d6/src/libraries/MarketParamsLib.sol#L18
             marketParamsId := keccak256(marketParams, 160)
         }
 
