@@ -5,6 +5,7 @@ import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IMorpho, MarketParams, Market, Id} from "@morpho/interfaces/IMorpho.sol";
 import {IMorphoRepayCallback, IMorphoSupplyCollateralCallback} from "@morpho/interfaces/IMorphoCallbacks.sol";
 import {RelendWTokenL1} from "./RelendWTokenL1.sol";
@@ -13,6 +14,8 @@ import {FixedPriceOracle} from "./FixedPriceOracle.sol";
 
 
 contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRepayCallback {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant LISTER_ROLE = keccak256("LISTER_ROLE");
     bytes32 public constant LIQUIDITY_ROLE = keccak256("LIQUIDITY_ROLE");    
 
@@ -56,8 +59,8 @@ contract MorphoBank is AccessControl, IMorphoSupplyCollateralCallback, IMorphoRe
             MORPHO.createMarket(marketParams);
         }
 
-        IERC20(underlyingAsset).approve(address(MORPHO), type(uint256).max);
-        IERC20(underlyingAsset).approve(address(_wToken), type(uint256).max);
+        IERC20(underlyingAsset).forceApprove(address(MORPHO), type(uint256).max);
+        IERC20(underlyingAsset).forceApprove(address(_wToken), type(uint256).max);
 
         IERC20(_wToken).approve(address(wrapper), type(uint256).max);
 
