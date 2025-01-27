@@ -10,16 +10,38 @@ import {FixedPriceOracle} from "./../../src/L1/FixedPriceOracle.sol";
 import {IMorpho, MarketParams, Market, Id, Position} from "@morpho/interfaces/IMorpho.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-contract FakeUSDC is ERC20 {
-    constructor(address whale) ERC20("FakeUSDC", "FUSDC") {
-        _mint(whale, 2 ** 255);
+contract BadERC20 {
+    // no return value for transfer and approve
+    // no name and symbol
+    // no decimals
+
+    mapping(address => uint) public balanceOf;
+    mapping(address => mapping(address => uint)) allowance;
+
+    function transfer(address to, uint value) public {
+        balanceOf[msg.sender] -= value;
+        balanceOf[to] += value;
     }
 
-    function decimals() override pure public returns(uint8) {
-        return 6;
+    function transferFrom(address from, address to, uint value) public {
+        allowance[from][msg.sender] -= value;
+
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+    }
+
+    function approve(address spender, uint value) public {
+        require(allowance[msg.sender][spender] == 0 || value == 0, "current allowance or new allowance must be 0");
+
+        allowance[msg.sender][spender] = value;
     }
 }
 
+contract FakeUSDC is BadERC20 {
+    constructor(address whale) {
+        balanceOf[whale] = 2 ** 255;
+    }
+}
 
 contract BankTest is Test {
     FakeUSDC usdc;
@@ -75,35 +97,8 @@ contract BankTest is Test {
         bank.grantRole(bank.LIQUIDITY_ROLE(), liquidityCurator);
         vm.stopPrank();
     }
-/*
 
-    function testTopupLiquidity() public {
-        vm.startPrank(multisig2);
-
-        // start with 0 balance
-        assertEq(usdc.balanceOf(address(wusdc)), 0);
-
-        // do topup
-        bank.topUpLiquidity(address(wusdc), 2e10);
-
-        assertEq(usdc.balanceOf(address(wusdc)), 2e10);
-
-        // do topdown
-        bank.topDownLiquidity(address(wusdc), 1e10);        
-        assertEq(usdc.balanceOf(address(wusdc)), 1e10);
-
-        vm.stopPrank();
-
-        vm.startPrank(multisig1);
-
-        assertEq(usdc.balanceOf(address(multisig1)), 0);
-        wusdc.fractionalReserveMint(address(multisig1), 12e6);
-        wusdc.withdrawTo(address(multisig1), 12e6);
-        assertEq(usdc.balanceOf(address(multisig1)), 12e6);        
-
-        vm.stopPrank();
-    }
-*/
+    event WTokenListed(address indexed _wToken, Id _morphoMarketId);
     function testBasicListing() public {
         address minter = address(0x666);
         address burner = address(0x777);
@@ -112,6 +107,8 @@ contract BankTest is Test {
         RelendWTokenL1 wusdc = deployWrappedUSDC(address(usdc), "W Fake USDC", "WF", minter, burner);
 
         vm.startPrank(lister);
+        vm.expectEmit(address(bank));
+        emit WTokenListed(address(wusdc), Id.wrap(0x00e1f0349265946cfd442afa16b44dde8d17316ca67aabf302b64835d78d4759));
         Id marketId = bank.listWToken(address(wusdc), oracleOwner);
         vm.stopPrank();
 
@@ -156,7 +153,13 @@ contract BankTest is Test {
 
         vm.expectRevert("listWToken: wtoken is already listed");
         bank.listWToken(address(wusdc), oracleOwner);        
-        vm.stopPrank();        
+        vm.stopPrank();
+
+
+        RelendWTokenL1 wusdc2 = deployWrappedUSDC(address(usdc), "W Fake USDC2", "WF2", minter, burner);
+        vm.startPrank(lister);
+        bank.listWToken(address(wusdc2), oracleOwner);
+        vm.stopPrank();
     }
 
     function testListAfterMarketWasAlreadyCreated() public {
@@ -209,8 +212,8 @@ contract BankTest is Test {
         vm.stopPrank();        
     }
 
-    event LiquidityTopUp(address _wtoken, uint _amount);
-    event LiquidityTopDown(address _wtoken, uint _amount);
+    event LiquidityTopUp(address indexed _wtoken, uint _amount);
+    event LiquidityTopDown(address indexed _wtoken, uint _amount);
     function testTopup() public {
         address minter = address(0x666);
         address burner = address(0x777);
@@ -368,3 +371,4 @@ contract BankTest is Test {
         (params.loanToken, params.collateralToken, params.oracle, params.irm, params.lltv) = b.wTokenMarketParams(w);
     }
 }
+
