@@ -42,8 +42,14 @@ contract BadERC20 {
 
 contract FakeUSDC is BadERC20 {
     constructor(address whale) {
-        balanceOf[whale] = 2 ** 255;
+        balanceOf[whale] = 2 ** 255 - 1;
     }
+}
+
+interface IUSDC {
+    function masterMinter() external view returns(address);
+    function mint(address to, uint amount) external;
+    function configureMinter(address minter, uint256 minterAllowedAmount) external returns (bool);
 }
 
 contract BankTest is Test, IMorphoFlashLoanCallback {
@@ -70,11 +76,42 @@ contract BankTest is Test, IMorphoFlashLoanCallback {
     IMorpho public morpho;
     uint seed = 777;
 
+    function isForkTest() internal view returns(bool) {
+        uint chainId;
+        assembly {
+            chainId := chainid()
+        }
+
+        return chainId == uint(1);
+    }
+
+    function deployUSDC(address whale) internal returns(FakeUSDC) {
+        if(isForkTest()) {
+            address usdcAddress = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+            address masterMinter = IUSDC(usdcAddress).masterMinter();
+            vm.startPrank(masterMinter);
+            IUSDC(usdcAddress).configureMinter(masterMinter, 2**255 - 1);
+            IUSDC(usdcAddress).mint(whale, 2 ** 255 - 1);
+            assertEq(FakeUSDC(usdcAddress).balanceOf(whale), 2 ** 255 - 1);
+            vm.stopPrank();
+
+            return FakeUSDC(usdcAddress);
+        }
+        else {
+            return new FakeUSDC(whale);
+        }
+    }    
+
     function setUp() public {
         // deploying with deployCode because compiler versions are conflicting
-        morpho = IMorpho(deployCode("Morpho.sol", abi.encode(address(this))));
-        morpho.enableIrm(address(0));
-        morpho.enableLltv(0.98e18);
+        if(isForkTest()) {
+            morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+        }
+        else {
+            morpho = IMorpho(deployCode("Morpho.sol", abi.encode(address(this))));
+            morpho.enableIrm(address(0));
+            morpho.enableLltv(0.98e18);
+        }
 
         vm.deal(bankOwner, 100 ether);
         vm.deal(lister, 100 ether);
@@ -86,7 +123,7 @@ contract BankTest is Test, IMorphoFlashLoanCallback {
 
         vm.startPrank(deployer);
 
-        usdc = new FakeUSDC(usdcWhale);
+        usdc = deployUSDC(usdcWhale);
 
         bank = new MorphoBank(morpho, bankOwner);
 

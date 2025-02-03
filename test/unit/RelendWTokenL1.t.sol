@@ -32,6 +32,12 @@ contract AcceptCall {
     }
 }
 
+interface IUSDC {
+    function masterMinter() external view returns(address);
+    function mint(address to, uint amount) external;
+    function configureMinter(address minter, uint256 minterAllowedAmount) external returns (bool);
+}
+
 
 contract RelendWTokenL1Test is Test {
     FakeUSDC usdc;
@@ -44,6 +50,32 @@ contract RelendWTokenL1Test is Test {
     address curator = address(0x123456);
     address burner = address(0x777);
 
+    function isForkTest() internal view returns(bool) {
+        uint chainId;
+        assembly {
+            chainId := chainid()
+        }
+
+        return chainId == uint(1);
+    }
+
+    function deployUSDC(address whale) internal returns(FakeUSDC) {
+        if(isForkTest()) {
+            address usdcAddress = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+            address masterMinter = IUSDC(usdcAddress).masterMinter();
+            vm.startPrank(masterMinter);
+            IUSDC(usdcAddress).configureMinter(masterMinter, 2**255 - 1);
+            IUSDC(usdcAddress).mint(whale, 2 ** 255 - 1);
+            assertEq(FakeUSDC(usdcAddress).balanceOf(whale), 2 ** 255 - 1);
+            vm.stopPrank();
+
+            return FakeUSDC(usdcAddress);
+        }
+        else {
+            return new FakeUSDC(whale);
+        }
+    }    
+
     function setUp() public {
         vm.deal(wrappedOwner, 100 ether);
         vm.deal(usdcWhale, 100 ether);        
@@ -52,7 +84,7 @@ contract RelendWTokenL1Test is Test {
         vm.deal(curator, 100 ether);
         vm.deal(burner, 100 ether);        
 
-        usdc = new FakeUSDC(usdcWhale);
+        usdc = deployUSDC(usdcWhale);
         wusdc = new RelendWTokenL1(address(usdc), "Best L2 USD", "blUSD", wrappedOwner);
 
         vm.startPrank(wrappedOwner);

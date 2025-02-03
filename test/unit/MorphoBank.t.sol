@@ -39,8 +39,14 @@ contract BadERC20 {
 
 contract FakeUSDC is BadERC20 {
     constructor(address whale) {
-        balanceOf[whale] = 2 ** 255;
+        balanceOf[whale] = 2 ** 255 - 1;
     }
+}
+
+interface IUSDC {
+    function masterMinter() external view returns(address);
+    function mint(address to, uint amount) external;
+    function configureMinter(address minter, uint256 minterAllowedAmount) external returns (bool);
 }
 
 contract BankTest is Test {
@@ -59,16 +65,63 @@ contract BankTest is Test {
     address randomUser = address(0x7);
 
     // this assumes the deployer of the bank is 0x6, and that the bank did not do any txs before
-    address expectedFirstDeployedWrapperAddress = address(0x40fafE910182F11DF5f9C3c36FF2f02c3EbED325);
-    address expectedFirstDeployedFixedPriceOracleAddress = address(0xA6DAd7b48ED5f48f8764F97a6850EcC8D6d5e1E7);
+    address expectedFirstDeployedWrapperAddressNonFork = address(0x40fafE910182F11DF5f9C3c36FF2f02c3EbED325);
+    address expectedFirstDeployedFixedPriceOracleAddressNonFork = address(0xA6DAd7b48ED5f48f8764F97a6850EcC8D6d5e1E7);
+
+    address expectedFirstDeployedWrapperAddressFork = address(0x104fBc016F4bb334D775a19E8A6510109AC63E00);
+    address expectedFirstDeployedFixedPriceOracleAddressFork = address(0x037eDa3aDB1198021A9b2e88C22B464fD38db3f3);
+
+    address expectedFirstDeployedWrapperAddress;
+    address expectedFirstDeployedFixedPriceOracleAddress;
 
     IMorpho public morpho;
 
+
+    function isForkTest() internal view returns(bool) {
+        uint chainId;
+        assembly {
+            chainId := chainid()
+        }
+
+        return chainId == uint(1);
+    }
+
+    function deployUSDC(address whale) internal returns(FakeUSDC) {
+        if(isForkTest()) {
+            address usdcAddress = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+            address masterMinter = IUSDC(usdcAddress).masterMinter();
+            vm.startPrank(masterMinter);
+            IUSDC(usdcAddress).configureMinter(masterMinter, 2**255 - 1);
+            IUSDC(usdcAddress).mint(whale, 2 ** 255 - 1);
+            assertEq(FakeUSDC(usdcAddress).balanceOf(whale), 2 ** 255 - 1);
+            vm.stopPrank();
+
+            return FakeUSDC(usdcAddress);
+        }
+        else {
+            return new FakeUSDC(whale);
+        }
+    }
+
     function setUp() public {
+        if(! isForkTest()) {
+            expectedFirstDeployedWrapperAddress = expectedFirstDeployedWrapperAddressNonFork;
+            expectedFirstDeployedFixedPriceOracleAddress = expectedFirstDeployedFixedPriceOracleAddressNonFork;
+        }
+        else {
+            expectedFirstDeployedWrapperAddress = expectedFirstDeployedWrapperAddressFork;
+            expectedFirstDeployedFixedPriceOracleAddress = expectedFirstDeployedFixedPriceOracleAddressFork;            
+        }
+
         // deploying with deployCode because compiler versions are conflicting
-        morpho = IMorpho(deployCode("Morpho.sol", abi.encode(address(this))));
-        morpho.enableIrm(address(0));
-        morpho.enableLltv(0.98e18);
+        if(isForkTest()) {
+            morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+        }
+        else {
+            morpho = IMorpho(deployCode("Morpho.sol", abi.encode(address(this))));
+            morpho.enableIrm(address(0));
+            morpho.enableLltv(0.98e18);
+        }
 
         vm.deal(bankOwner, 100 ether);
         vm.deal(lister, 100 ether);
@@ -80,7 +133,7 @@ contract BankTest is Test {
 
         vm.startPrank(deployer);
 
-        usdc = new FakeUSDC(usdcWhale);
+        usdc = deployUSDC(usdcWhale);//new FakeUSDC(usdcWhale);
 
         bank = new MorphoBank(morpho, bankOwner);
 
@@ -106,10 +159,15 @@ contract BankTest is Test {
 
         RelendWTokenL1 wusdc = deployWrappedUSDC(address(usdc), "W Fake USDC", "WF", minter, burner);
 
+        Id expectedMarketId;
+        if(isForkTest()) expectedMarketId = Id.wrap(0x0e716514fdb032be96e3f6b33e054fbbe3a59659ba067f6f444c174e81e06846);
+        else expectedMarketId = Id.wrap(0x00e1f0349265946cfd442afa16b44dde8d17316ca67aabf302b64835d78d4759);
+
         vm.startPrank(lister);
         vm.expectEmit(address(bank));
-        emit WTokenListed(address(wusdc), Id.wrap(0x00e1f0349265946cfd442afa16b44dde8d17316ca67aabf302b64835d78d4759));
+        emit WTokenListed(address(wusdc), expectedMarketId);
         Id marketId = bank.listWToken(address(wusdc), oracleOwner);
+        assertEq(Id.unwrap(expectedMarketId), Id.unwrap(marketId));
         vm.stopPrank();
 
         MarketParams memory marketParams = getMarketParams(bank, address(wusdc));
