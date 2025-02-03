@@ -185,6 +185,7 @@ contract RelendWTokenL1Test is Test {
         vm.assume(nonAdminAddress != wrappedOwner);
         vm.assume(nonCuratorRole != curator);
         vm.assume(nonBurnerRole != burner);
+        vm.assume(nonBurnerRole != nonCuratorRole);
 
         vm.deal(nonAdminAddress, 100 ether);
         vm.deal(nonCuratorRole, 100 ether);
