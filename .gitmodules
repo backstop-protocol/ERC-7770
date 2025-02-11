@@ -7,3 +7,6 @@
 [submodule "lib/multicall"]
 	path = lib/multicall
 	url = https://github.com/mds1/multicall
+[submodule "lib/morpho"]
+	url = https://github.com/morpho-org/morpho-blue.git
+
