@@ -1,3 +1,5 @@
-# ERC-XXX
+# ERC-7770
 
-Home of the ERC-XXX Token implementation
+Relend Network Stablecoin infrastrucutre.
+Coming live soon.
+Learn more here https://docs.relend.network/relend.docs/introduction/rusdc
